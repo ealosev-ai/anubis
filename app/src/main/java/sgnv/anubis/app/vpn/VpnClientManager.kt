@@ -20,12 +20,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-class VpnClientManager(
+open class VpnClientManager(
     private val context: Context,
     private val shell: ShellExec,
 ) : VpnControls {
 
-    private val _vpnActive = MutableStateFlow(false)
+    protected val _vpnActive = MutableStateFlow(false)
     override val vpnActive: StateFlow<Boolean> = _vpnActive
 
     private val _activeVpnClient = MutableStateFlow<VpnClientType?>(null)
@@ -73,7 +73,7 @@ class VpnClientManager(
      * For TOGGLE: sends toggle only if VPN is currently off.
      * For MANUAL: just opens the app.
      */
-    override suspend fun startVPN(client: SelectedVpnClient) {
+    open override suspend fun startVPN(client: SelectedVpnClient) {
         val knownType = client.knownType
         if (knownType != null) {
             val control = VpnClientControls.getControl(knownType)
@@ -104,7 +104,7 @@ class VpnClientManager(
         }
     }
 
-    override suspend fun stopVPN(client: SelectedVpnClient) {
+    open override suspend fun stopVPN(client: SelectedVpnClient) {
         val knownType = client.knownType
         if (knownType != null) {
             val control = VpnClientControls.getControl(knownType)
@@ -127,7 +127,7 @@ class VpnClientManager(
         // For custom clients: caller handles via force-stop
     }
 
-    override fun launchApp(packageName: String) {
+    open override fun launchApp(packageName: String) {
         val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
         if (launchIntent != null) {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -135,7 +135,7 @@ class VpnClientManager(
         }
     }
 
-    fun startMonitoringVpn() {
+    open fun startMonitoringVpn() {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         _vpnActive.value = isVpnCurrentlyActive(cm)
 

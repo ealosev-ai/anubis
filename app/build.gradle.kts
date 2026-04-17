@@ -17,7 +17,9 @@ android {
         targetSdk = 34
         versionCode = 2
         versionName = "0.1.1"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Custom runner подменяет AnubisApp на TestAnubisApp в тестах —
+        // для Compose UI-сценариев важно не тянуть реальный VpnClientManager.
+        testInstrumentationRunner = "sgnv.anubis.app.AnubisTestRunner"
     }
 
 
@@ -129,4 +131,8 @@ dependencies {
     androidTestImplementation("androidx.test:rules:1.5.0")
     androidTestImplementation("androidx.room:room-testing:2.7.2")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // Compose UI-тесты для scenario-flow (MainActivity + UI interactions).
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

@@ -21,11 +21,20 @@ import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuManager
 import sgnv.anubis.app.vpn.VpnClientManager
 
-class AnubisApp : Application() {
+open class AnubisApp : Application() {
 
     val database: AppDatabase by lazy { AppDatabase.getInstance(this) }
     lateinit var shizukuManager: ShizukuManager
         private set
+
+    /**
+     * Factory для VpnClientManager — testAnubisApp override возвращает FakeVpnClientManager,
+     * чтобы Compose UI-тесты могли программно переключать `vpnActive` без реального v2rayNG.
+     * `val vpnClientManager by lazy { createVpnClientManager() }` — первый обращение создаёт
+     * инстанс через этот hook.
+     */
+    protected open fun createVpnClientManager(): VpnClientManager =
+        VpnClientManager(this, shizukuManager)
 
     /**
      * VpnClientManager + Orchestrator — тоже process-singleton. Раньше каждый
@@ -34,7 +43,7 @@ class AnubisApp : Application() {
      * один инстанс, мониторинг VPN поднимается один раз в onCreate.
      */
     val appRepository: AppRepository by lazy { AppRepository(database.managedAppDao(), this) }
-    val vpnClientManager: VpnClientManager by lazy { VpnClientManager(this, shizukuManager) }
+    val vpnClientManager: VpnClientManager by lazy { createVpnClientManager() }
     val orchestrator: StealthOrchestrator by lazy {
         StealthOrchestrator(this, shizukuManager, vpnClientManager, appRepository)
     }
@@ -61,7 +70,7 @@ class AnubisApp : Application() {
         AuditRepository(appRepository, database.auditHitDao(), applicationScope)
     }
 
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    protected val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -81,6 +90,15 @@ class AnubisApp : Application() {
         }
         shizukuManager.startListening()
 
+        startRuntimeMonitoring()
+    }
+
+    /**
+     * Стартуем runtime-компоненты (NetworkCallback, hit-коллектор, HitNotifier).
+     * Выделено в open-метод чтобы TestAnubisApp мог override'нуть и не тянуть
+     * реальный ConnectivityManager/Shizuku в UI-сценариях.
+     */
+    protected open fun startRuntimeMonitoring() {
         // Стартуем VPN-мониторинг единожды на процесс. Раньше это делал каждый
         // ViewModel/Tile/Shortcut со своим экземпляром и регистрировал новый
         // NetworkCallback — теперь один.
