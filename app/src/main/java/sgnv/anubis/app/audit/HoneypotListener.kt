@@ -2,7 +2,7 @@ package sgnv.anubis.app.audit
 
 import android.util.Log
 import sgnv.anubis.app.audit.model.AuditHit
-import sgnv.anubis.app.shizuku.ShizukuManager
+import sgnv.anubis.app.shizuku.ShellExec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,9 +41,9 @@ private const val TAG = "AuditHoneypot"
  *   - 9050           — Tor SOCKS
  */
 class HoneypotListener(
-    private val shizukuManager: ShizukuManager,
+    private val shell: ShellExec,
 ) {
-    private val resolver = UidResolver(shizukuManager)
+    private val resolver = UidResolver(shell)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _hits = MutableSharedFlow<AuditHit>(

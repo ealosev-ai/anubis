@@ -268,36 +268,6 @@ class VpnClientManager(
             ?.removePrefix("package:")
     }
 
-    /**
-     * Разные Android версии печатают VPN-agent в dumpsys по-разному. Ищем
-     * OwnerUid/uid в блоке NetworkAgentInfo, у которого есть признак VPN:
-     *   - "type: VPN["          — до Android 12
-     *   - "Transports: VPN"     — Android 12+
-     *   - "[VPN]"               — иногда на Android 14/15
-     *
-     * Возвращаем первый найденный uid > 1000 (приложение, не системный демон).
-     */
-    internal fun extractVpnOwnerUid(dump: String): Int? {
-        val ownerUidRx = Regex("""OwnerUid[:=\s]+(\d+)""")
-        val vpnMarkerRx = Regex("""(?:type: VPN\[|Transports:[^\n]*\bVPN\b|\[VPN\])""")
-
-        // Разбиваем на абзацы по пустой строке — NetworkAgentInfo обычно занимает один блок.
-        for (block in dump.split("\n\n", "\n \n")) {
-            if (!vpnMarkerRx.containsMatchIn(block)) continue
-            val uid = ownerUidRx.find(block)?.groupValues?.get(1)?.toIntOrNull() ?: continue
-            if (uid > 1000) return uid
-        }
-
-        // Fallback: скользящее окно в 30 строк после маркера (на случай если блоки слеплены).
-        val lines = dump.lineSequence().toList()
-        for (i in lines.indices) {
-            if (!vpnMarkerRx.containsMatchIn(lines[i])) continue
-            val window = lines.subList(i, minOf(i + 30, lines.size)).joinToString("\n")
-            val uid = ownerUidRx.find(window)?.groupValues?.get(1)?.toIntOrNull() ?: continue
-            if (uid > 1000) return uid
-        }
-        return null
-    }
 
     private suspend fun getVpnOwnerByForegroundService(): String? {
         for (client in VpnClientType.entries) {
@@ -326,4 +296,38 @@ class VpnClientManager(
     companion object {
         private const val TAG = "VpnClientManager"
     }
+}
+
+/**
+ * Разные Android версии печатают VPN-agent в dumpsys по-разному. Ищем
+ * OwnerUid в блоке NetworkAgentInfo, у которого есть признак VPN:
+ *   - "type: VPN["          — до Android 12
+ *   - "Transports: VPN"     — Android 12+
+ *   - "[VPN]"               — иногда на Android 14/15
+ *
+ * Возвращаем первый найденный uid > 1000 (приложение, не системный демон).
+ *
+ * Top-level (не method) чтобы можно было тестировать без инстанса VpnClientManager —
+ * функция чистая, state класса не использует.
+ */
+internal fun extractVpnOwnerUid(dump: String): Int? {
+    val ownerUidRx = Regex("""OwnerUid[:=\s]+(\d+)""")
+    val vpnMarkerRx = Regex("""(?:type: VPN\[|Transports:[^\n]*\bVPN\b|\[VPN\])""")
+
+    // Разбиваем на абзацы по пустой строке — NetworkAgentInfo обычно занимает один блок.
+    for (block in dump.split("\n\n", "\n \n")) {
+        if (!vpnMarkerRx.containsMatchIn(block)) continue
+        val uid = ownerUidRx.find(block)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+        if (uid > 1000) return uid
+    }
+
+    // Fallback: скользящее окно в 30 строк после маркера (на случай если блоки слеплены).
+    val lines = dump.lineSequence().toList()
+    for (i in lines.indices) {
+        if (!vpnMarkerRx.containsMatchIn(lines[i])) continue
+        val window = lines.subList(i, minOf(i + 30, lines.size)).joinToString("\n")
+        val uid = ownerUidRx.find(window)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+        if (uid > 1000) return uid
+    }
+    return null
 }

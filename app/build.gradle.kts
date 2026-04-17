@@ -70,6 +70,14 @@ android {
         aidl = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests {
+            // Возвращать дефолты (0/null/false) вместо Stub-исключений, чтобы
+            // тесты на чистой JVM не падали на android.util.Log.* и подобном.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -99,4 +107,8 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Тесты (jvm/unit) — Android-framework не тянем, только чистая логика.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }

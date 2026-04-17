@@ -27,7 +27,10 @@ enum class FreezeMode {
     SUSPEND,
 }
 
-class ShizukuManager(private val packageManager: PackageManager) {
+class ShizukuManager(private val packageManager: PackageManager) : ShellExec {
+
+    override suspend fun runShell(vararg args: String): String? = runCommandWithOutput(*args)
+
 
     @Volatile
     private var userService: IUserService? = null

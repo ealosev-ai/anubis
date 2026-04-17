@@ -2,7 +2,7 @@ package sgnv.anubis.app.audit
 
 import android.os.Process
 import android.util.Log
-import sgnv.anubis.app.shizuku.ShizukuManager
+import sgnv.anubis.app.shizuku.ShellExec
 
 private const val TAG = "AuditResolver"
 
@@ -18,7 +18,7 @@ private const val TAG = "AuditResolver"
  *
  * Важно: кэшируем `uid -> pkg`, потому что `pm list` — тяжёлый вызов.
  */
-class UidResolver(private val shizukuManager: ShizukuManager) {
+class UidResolver(private val shell: ShellExec) {
 
     private data class CacheEntry(val pkg: String?, val writtenAtMs: Long)
 
@@ -120,7 +120,7 @@ class UidResolver(private val shizukuManager: ShizukuManager) {
 
     private suspend fun readProcNet(path: String): String? {
         // `cat` обычно есть, но на всякий случай fallback через `/system/bin/toybox cat`
-        return shizukuManager.runCommandWithOutput("cat", path)
+        return shell.runShell("cat", path)
             ?.takeIf { !it.startsWith("ERROR:") }
     }
 
@@ -160,7 +160,7 @@ class UidResolver(private val shizukuManager: ShizukuManager) {
             cachePut(uid, null)
             return null
         }
-        val out = shizukuManager.runCommandWithOutput("pm", "list", "packages", "--uid", uid.toString())
+        val out = shell.runShell("pm", "list", "packages", "--uid", uid.toString())
         // Формат: "package:com.example.app" (по одной строке на пакет, обычно одна)
         val pkg = out
             ?.lineSequence()
