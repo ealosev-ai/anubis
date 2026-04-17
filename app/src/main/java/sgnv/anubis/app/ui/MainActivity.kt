@@ -46,9 +46,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Android 13+ требует runtime-grant для notifications. Без него
+     *  ongoing-notification AuditForegroundService висит «невидимкой» —
+     *  сервис работает, но пользователь ничего не видит в шторке. */
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* granted-флаг не нужен — ios-like UX: если не дали, user просто ничего не увидит */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        requestNotificationsPermissionIfNeeded()
 
         setContent {
             AnubisTheme {
@@ -132,5 +141,12 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModelRef?.onResume()
+    }
+
+    private fun requestNotificationsPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        val perm = android.Manifest.permission.POST_NOTIFICATIONS
+        if (checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        notificationPermissionLauncher.launch(perm)
     }
 }

@@ -24,9 +24,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -64,6 +66,20 @@ fun AuditScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // Фоновый режим — читаем/пишем через AuditController напрямую (не через
+    // MainViewModel). AuditScreen открывается из разных мест (Settings, Home),
+    // MainViewModel шарится, но AuditViewModel свой — не хочется тянуть зависимость.
+    var backgroundEnabled by remember {
+        mutableStateOf(
+            sgnv.anubis.app.service.AuditController.isBackgroundEnabled(context)
+        )
+    }
+    var decoyWithBackground by remember {
+        mutableStateOf(
+            sgnv.anubis.app.service.AuditController.isDecoyWithBackgroundEnabled(context)
+        )
+    }
+
     // Launcher для системного диалога VPN-consent. Если user согласился —
     // реально поднимаем декой-tun0.
     val vpnConsentLauncher = rememberLauncherForActivityResult(
@@ -89,7 +105,7 @@ fun AuditScreen(
         Spacer(Modifier.height(8.dp))
 
         Text(
-            "Аудит детекторов VPN",
+            "Ловушки для сканеров",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
@@ -105,6 +121,97 @@ fun AuditScreen(
         )
 
         Spacer(Modifier.height(16.dp))
+
+        // ── Фоновый режим (держит ловушки активными 24/7) ──────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (backgroundEnabled)
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceVariant,
+            ),
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Круглосуточно",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            if (backgroundEnabled)
+                                "Ловушки висят в фоне, уведомление в шторке, авто-перезапуск после ребута"
+                            else
+                                "Включите — и ловушки будут жить без открытого Anubis",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = backgroundEnabled,
+                        onCheckedChange = { enabled ->
+                            backgroundEnabled = enabled
+                            if (enabled) {
+                                sgnv.anubis.app.service.AuditController.start(
+                                    context, persistPreference = true,
+                                )
+                            } else {
+                                sgnv.anubis.app.service.AuditController.stop(
+                                    context, persistPreference = true,
+                                )
+                            }
+                        },
+                    )
+                }
+                if (backgroundEnabled) {
+                    androidx.compose.material3.HorizontalDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "С приманкой VPN",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                "soft-tun0 без блокировки трафика. Детекторы видят VPN и идут " +
+                                    "сканить localhost. ~5% батареи в сутки.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = decoyWithBackground,
+                            onCheckedChange = { enabled ->
+                                decoyWithBackground = enabled
+                                sgnv.anubis.app.service.AuditController.setDecoyWithBackground(
+                                    context, enabled,
+                                )
+                            },
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                    Text(
+                        "Honor / MagicOS 10+ (Android 16): Настройки → Приложения → Anubis → " +
+                            "Батарея → «Ручное управление» → все тумблеры ON. Иначе система " +
+                            "убивает сервис в фоне.\n\nЕсли уведомление не появилось в шторке — " +
+                            "проверьте разрешение на уведомления в настройках приложения.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
 
         if (vpnActive && !running) {
             Card(
@@ -141,10 +248,23 @@ fun AuditScreen(
                 Button(
                     onClick = { auditViewModel.start() },
                     modifier = Modifier.weight(1f),
-                ) { Text("Старт") }
+                    // Одноразовый запуск — пока экран открыт. Для постоянного —
+                    // тогл «Круглосуточно» сверху.
+                ) { Text("Разово") }
             } else {
                 FilledTonalButton(
-                    onClick = { auditViewModel.stop() },
+                    onClick = {
+                        if (backgroundEnabled) {
+                            // Если активен фоновый режим — останавливаем через
+                            // Controller (чтобы FGS тоже убился).
+                            sgnv.anubis.app.service.AuditController.stop(
+                                context, persistPreference = true,
+                            )
+                            backgroundEnabled = false
+                        } else {
+                            auditViewModel.stop()
+                        }
+                    },
                     modifier = Modifier.weight(1f),
                 ) { Text("Стоп") }
             }
