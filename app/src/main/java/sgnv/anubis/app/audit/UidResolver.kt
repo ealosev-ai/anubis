@@ -19,7 +19,35 @@ private const val TAG = "AuditResolver"
  */
 class UidResolver(private val shizukuManager: ShizukuManager) {
 
-    private val uidToPackageCache = mutableMapOf<Int, String?>()
+    private data class CacheEntry(val pkg: String?, val writtenAtMs: Long)
+
+    // LRU-кэш. `pm list packages` стоит ~50ms, но и кэш не должен расти бесконечно:
+    // при долгом аудите на сутках приходят сотни уникальных uid, большинство — шум.
+    // removeEldestEntry выкидывает тех, к кому давно не обращались. TTL 1ч — на
+    // случай если приложению сменился uid (переустановка с другим user slot).
+    private val uidToPackageCache = object : LinkedHashMap<Int, CacheEntry>(
+        /* initialCapacity = */ 64,
+        /* loadFactor = */ 0.75f,
+        /* accessOrder = */ true,
+    ) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, CacheEntry>?): Boolean =
+            size > CACHE_MAX_SIZE
+    }
+
+    private fun cacheGet(uid: Int): String? {
+        val entry = synchronized(uidToPackageCache) { uidToPackageCache[uid] } ?: return null
+        if (System.currentTimeMillis() - entry.writtenAtMs > CACHE_TTL_MS) {
+            synchronized(uidToPackageCache) { uidToPackageCache.remove(uid) }
+            return null
+        }
+        return entry.pkg
+    }
+
+    private fun cachePut(uid: Int, pkg: String?) {
+        synchronized(uidToPackageCache) {
+            uidToPackageCache[uid] = CacheEntry(pkg, System.currentTimeMillis())
+        }
+    }
 
     /** Главная точка входа: по remote (клиентскому) порту → uid + pkg. */
     suspend fun resolve(remotePort: Int, localHoneypotPort: Int): Pair<Int?, String?> {
@@ -84,11 +112,11 @@ class UidResolver(private val shizukuManager: ShizukuManager) {
     }
 
     private suspend fun packageForUid(uid: Int): String? {
-        uidToPackageCache[uid]?.let { return it }
+        cacheGet(uid)?.let { return it }
         // Системные uid (< 10000) — это не приложение, а демоны/сам шелл.
         // Для них pm list всё равно ничего не вернёт.
         if (uid < 10000) {
-            uidToPackageCache[uid] = null
+            cachePut(uid, null)
             return null
         }
         val out = shizukuManager.runCommandWithOutput("pm", "list", "packages", "--uid", uid.toString())
@@ -99,7 +127,12 @@ class UidResolver(private val shizukuManager: ShizukuManager) {
             ?.firstOrNull { it.startsWith("package:") }
             ?.removePrefix("package:")
         Log.d(TAG, "pm list packages --uid $uid → pkg=$pkg (raw=${out?.take(200)})")
-        uidToPackageCache[uid] = pkg
+        cachePut(uid, pkg)
         return pkg
+    }
+
+    private companion object {
+        const val CACHE_MAX_SIZE = 256
+        const val CACHE_TTL_MS = 60 * 60 * 1000L  // 1h
     }
 }

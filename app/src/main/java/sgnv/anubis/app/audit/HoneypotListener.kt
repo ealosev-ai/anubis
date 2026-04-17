@@ -78,35 +78,59 @@ class HoneypotListener(
         _debug.update(transform)
     }
 
-    /** Запустить прослушивание всех портов. Неуспешные `bind()` просто пропускаем. */
+    /**
+     * Запустить прослушивание всех портов на обоих loopback (IPv4 + IPv6).
+     * Неуспешные `bind()` просто пропускаем. Порт считается LISTENING, если
+     * поднялся хоть один из двух — сканеру достаточно одного ответа.
+     */
     fun start() {
         if (_running.value) return
         _running.value = true
         _debug.value = HoneypotDebug(startedAtMs = System.currentTimeMillis())
-        Log.e(TAG, "start(): binding ${PORTS.size} ports on 127.0.0.1")
-        val loopback = InetAddress.getByName("127.0.0.1")
+        Log.e(TAG, "start(): binding ${PORTS.size} ports on 127.0.0.1 + ::1")
+        val loopback4 = InetAddress.getByName("127.0.0.1")
+        // ::1 — IPv6 loopback. Некоторые сканеры подключаются именно туда,
+        // особенно из приложений на Netty/OkHttp с DNS-ответом на localhost.
+        val loopback6 = try { InetAddress.getByName("::1") } catch (_: Exception) { null }
 
         for (port in PORTS) {
             val job = scope.launch {
-                val srv = try {
-                    ServerSocket(port, /* backlog = */ 4, loopback)
-                } catch (e: Exception) {
-                    Log.e(TAG, "bind port=$port FAILED: ${e.message}")
-                    bumpDebug { it.copy(
-                        portsFailed = it.portsFailed + port,
-                        lastError = "bind $port failed: ${e.message}",
-                    ) }
-                    _portStatus.tryEmit(PortStatus(port, PortState.BUSY, e.message))
-                    return@launch
+                val v4 = bind(port, loopback4, label = "v4")
+                val v6 = loopback6?.let { bind(port, it, label = "v6") }
+                val state = when {
+                    v4 != null || v6 != null -> PortState.LISTENING
+                    else -> PortState.BUSY
                 }
-                synchronized(serverSockets) { serverSockets += srv }
-                Log.e(TAG, "bind port=$port OK, listening")
-                bumpDebug { it.copy(portsListening = it.portsListening + port) }
-                _portStatus.tryEmit(PortStatus(port, PortState.LISTENING, null))
-                acceptLoop(srv, port)
+                if (state == PortState.LISTENING) {
+                    bumpDebug { it.copy(portsListening = it.portsListening + port) }
+                } else {
+                    bumpDebug { it.copy(portsFailed = it.portsFailed + port) }
+                }
+                _portStatus.tryEmit(PortStatus(port, state, null))
+                // accept-циклы бегут параллельно на каждой address family.
+                coroutineScopeLaunch(v4, port)
+                coroutineScopeLaunch(v6, port)
             }
             portJobs += job
         }
+    }
+
+    private fun bind(port: Int, addr: InetAddress, label: String): ServerSocket? {
+        return try {
+            val srv = ServerSocket(port, /* backlog = */ 4, addr)
+            synchronized(serverSockets) { serverSockets += srv }
+            Log.e(TAG, "bind port=$port/$label OK")
+            srv
+        } catch (e: Exception) {
+            Log.e(TAG, "bind port=$port/$label FAILED: ${e.message}")
+            bumpDebug { it.copy(lastError = "bind $port/$label: ${e.message}") }
+            null
+        }
+    }
+
+    private fun coroutineScopeLaunch(srv: ServerSocket?, honeypotPort: Int) {
+        if (srv == null) return
+        scope.launch { acceptLoop(srv, honeypotPort) }
     }
 
     /** Остановить, закрыть все сокеты. */

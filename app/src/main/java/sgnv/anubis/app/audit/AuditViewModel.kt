@@ -57,7 +57,12 @@ class AuditViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stop() = listener.stop()
 
-    fun clearHits() = repository.clear()
+    fun clearHits() {
+        viewModelScope.launch { repository.clear() }
+    }
+
+    /** Возвращает JSON-дамп всех хитов для ShareSheet. */
+    suspend fun exportAsJson(): String = repository.exportAsJson()
 
     fun markSuspectAsLocal(suspect: AuditSuspect) {
         val pkg = suspect.packageName ?: return

@@ -48,7 +48,10 @@ class StealthVpnService : VpnService() {
     private var decoyFd: ParcelFileDescriptor? = null
     private var decoyThread: Thread? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val autoStopRunnable = Runnable { stopDecoy() }
+    private val autoStopRunnable = Runnable {
+        Log.w(TAG, "decoy auto-stop fired after ${DECOY_TIMEOUT_MS / 3_600_000}h — tun0 был забыт")
+        stopDecoy()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Если сервис запущен через startForegroundService() (из AdbAuditReceiver

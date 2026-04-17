@@ -27,12 +27,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Intent
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sgnv.anubis.app.audit.AuditViewModel
 import sgnv.anubis.app.audit.HoneypotDebug
@@ -56,6 +60,8 @@ fun AuditScreen(
     val running by auditViewModel.running.collectAsState()
     val debug by auditViewModel.debug.collectAsState()
     val decoyActive by auditViewModel.decoyActive.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     // Launcher для системного диалога VPN-consent. Если user согласился —
     // реально поднимаем декой-tun0.
@@ -140,6 +146,25 @@ fun AuditScreen(
                     modifier = Modifier.weight(1f),
                 ) { Text("Остановить") }
             }
+            OutlinedButton(
+                onClick = {
+                    coroutineScope.launch {
+                        val json = auditViewModel.exportAsJson()
+                        val share = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_TEXT, json)
+                            putExtra(
+                                Intent.EXTRA_SUBJECT,
+                                "anubis-audit-${System.currentTimeMillis()}.json",
+                            )
+                        }
+                        context.startActivity(
+                            Intent.createChooser(share, "Экспорт аудита")
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                },
+            ) { Text("Экспорт") }
             OutlinedButton(
                 onClick = { auditViewModel.clearHits() },
             ) { Text("Очистить") }
