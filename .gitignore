@@ -7,6 +7,7 @@
 .cxx
 /app/build
 /core-shizuku/build
+/core-data/build
 
 # IDE
 /.idea

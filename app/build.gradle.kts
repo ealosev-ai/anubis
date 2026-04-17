@@ -98,14 +98,12 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Room
-    implementation("androidx.room:room-runtime:2.7.2")
-    implementation("androidx.room:room-ktx:2.7.2")
-    ksp("androidx.room:room-compiler:2.7.2")
+    // Room entities/Daos/migrations — в :core-data (Room как api там,
+    // для app будет transitively). Ksp-compiler тоже в :core-data.
 
-    // Shizuku и UserService живут в отдельном library-модуле — API 'api' там,
-    // так что ShellExec/ShizukuManager/Shizuku.* доступны через transitive.
+    // Library-модули: все sgnv.anubis.app.data.* и shizuku.* оттуда.
     implementation(project(":core-shizuku"))
+    implementation(project(":core-data"))
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
