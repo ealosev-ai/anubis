@@ -1,5 +1,6 @@
 package sgnv.anubis.app.audit
 
+import android.os.Process
 import android.util.Log
 import sgnv.anubis.app.shizuku.ShizukuManager
 
@@ -57,6 +58,18 @@ class UidResolver(private val shizukuManager: ShizukuManager) {
     }
 
     /**
+     * Резолв UDP-клиента. В отличие от TCP у UDP нет ESTABLISHED — клиентский
+     * сокет обычно unconnected (rem_address = 00000000:0000), поэтому искать
+     * надо по совпадению local_address:<srcPort> и отбрасывать нашу own-сторону
+     * (own uid), чтобы не вернуть себя.
+     */
+    suspend fun resolveUdp(srcPort: Int): Pair<Int?, String?> {
+        val uid = readUdpUidFromProcNet(srcPort)
+        val pkg = uid?.let { packageForUid(it) }
+        return uid to pkg
+    }
+
+    /**
      * Парсит `/proc/net/tcp` и `/proc/net/tcp6`. Формат (упрощённо, хексы):
      *   sl  local_address  rem_address  st  tx_queue:rx_queue  tr:tm_when  retrnsmt  uid  ...
      *
@@ -109,6 +122,34 @@ class UidResolver(private val shizukuManager: ShizukuManager) {
         // `cat` обычно есть, но на всякий случай fallback через `/system/bin/toybox cat`
         return shizukuManager.runCommandWithOutput("cat", path)
             ?.takeIf { !it.startsWith("ERROR:") }
+    }
+
+    private suspend fun readUdpUidFromProcNet(srcPort: Int): Int? {
+        val udp4 = readProcNet("/proc/net/udp") ?: ""
+        val udp6 = readProcNet("/proc/net/udp6") ?: ""
+        val combined = "$udp4\n$udp6"
+        if (combined.isBlank()) {
+            Log.w(TAG, "readUdpUidFromProcNet: /proc/net/udp[6] пусты — Shizuku down?")
+            return null
+        }
+
+        val srcPortHex = "%04X".format(srcPort)
+        val myUid = Process.myUid()
+
+        for (raw in combined.lineSequence()) {
+            val line = raw.trim()
+            if (line.isEmpty() || line.startsWith("sl ")) continue
+            val parts = line.split(Regex("\\s+"))
+            if (parts.size < 8) continue
+            val local = parts[1]
+            if (!local.endsWith(":$srcPortHex", ignoreCase = true)) continue
+            val uid = parts[7].toIntOrNull() ?: continue
+            if (uid == myUid) continue  // свой же server-side сокет
+            Log.d(TAG, "udp matched: local=$local uid=$uid")
+            return uid
+        }
+        Log.w(TAG, "no udp row matched :$srcPortHex")
+        return null
     }
 
     private suspend fun packageForUid(uid: Int): String? {

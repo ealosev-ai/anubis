@@ -16,4 +16,8 @@ data class AuditHitEntity(
     val uid: Int?,
     val packageName: String?,
     val handshakePreview: String?,
+    /** SNI hostname из TLS ClientHello, если клиент прислал HTTPS-handshake. */
+    val sni: String? = null,
+    /** "TCP" или "UDP". Старые записи до v6 — всегда TCP. */
+    val protocol: String = "TCP",
 )

@@ -17,6 +17,13 @@ data class AuditHit(
     val uid: Int?,
     val packageName: String?,
     val handshakePreview: String?,
+    /**
+     * Если клиент отправил TLS ClientHello (пытался проксировать HTTPS через нашу
+     * ловушку) — здесь server_name из SNI extension: внешний хост, куда он метился.
+     */
+    val sni: String? = null,
+    /** "TCP" или "UDP" — по какому протоколу шёл сканер. */
+    val protocol: String = "TCP",
 )
 
 /** Агрегат для UI: по пакету/uid — сколько раз сканил и какие порты. */
@@ -27,6 +34,8 @@ data class AuditSuspect(
     val portsSeen: Set<Int>,
     val lastSeenMs: Long,
     val lastHandshakePreview: String?,
+    val sniSeen: Set<String> = emptySet(),
+    val protocolsSeen: Set<String> = emptySet(),
 ) {
     /** Ключ для группировки: пакет, если известен, иначе uid, иначе фолбэк. */
     val groupKey: String = packageName ?: uid?.let { "uid:$it" } ?: "unknown"

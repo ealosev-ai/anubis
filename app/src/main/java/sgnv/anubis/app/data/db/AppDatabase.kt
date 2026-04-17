@@ -22,7 +22,7 @@ class AppGroupConverter {
 
 @Database(
     entities = [ManagedApp::class, AuditHitEntity::class],
-    version = 4,
+    version = 6,
     exportSchema = false,
 )
 @TypeConverters(AppGroupConverter::class)
@@ -56,6 +56,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 → v5: добавили SNI hostname из TLS ClientHello. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `audit_hits` ADD COLUMN `sni` TEXT")
+            }
+        }
+
+        /** v5 → v6: добавили протокол TCP/UDP (default TCP для старых записей). */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `audit_hits` ADD COLUMN `protocol` TEXT NOT NULL DEFAULT 'TCP'"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -63,7 +79,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "vpn_stealth.db"
                 )
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     // v1/v2 — исторические, схемы не известны. Fallback оставляем
                     // как safety net именно для них; для v3+ работают явные Migration.
                     .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1, 2)

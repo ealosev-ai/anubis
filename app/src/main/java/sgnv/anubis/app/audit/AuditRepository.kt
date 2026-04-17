@@ -80,6 +80,8 @@ class AuditRepository(
                     put("uid", h.uid ?: JSONObject.NULL)
                     put("packageName", h.packageName ?: JSONObject.NULL)
                     put("handshakePreview", h.handshakePreview ?: JSONObject.NULL)
+                    put("sni", h.sni ?: JSONObject.NULL)
+                    put("protocol", h.protocol)
                 }
             )
         }
@@ -103,6 +105,8 @@ class AuditRepository(
                     portsSeen = group.map { it.port }.toSet(),
                     lastSeenMs = latest.timestampMs,
                     lastHandshakePreview = latest.handshakePreview,
+                    sniSeen = group.mapNotNull { it.sni }.toSet(),
+                    protocolsSeen = group.map { it.protocol }.toSet(),
                 )
             }
             .sortedByDescending { it.lastSeenMs }
@@ -115,6 +119,8 @@ private fun AuditHit.toEntity() = AuditHitEntity(
     uid = uid,
     packageName = packageName,
     handshakePreview = handshakePreview,
+    sni = sni,
+    protocol = protocol,
 )
 
 private fun AuditHitEntity.toHit() = AuditHit(
@@ -123,4 +129,6 @@ private fun AuditHitEntity.toHit() = AuditHit(
     uid = uid,
     packageName = packageName,
     handshakePreview = handshakePreview,
+    sni = sni,
+    protocol = protocol,
 )

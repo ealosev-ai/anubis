@@ -425,7 +425,13 @@ private fun SuspectCard(
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                "Подключений: ${suspect.hitCount} · порты: ${suspect.portsSeen.sorted().joinToString()}",
+                buildString {
+                    append("Подключений: ${suspect.hitCount} · порты: ${suspect.portsSeen.sorted().joinToString()}")
+                    val protos = suspect.protocolsSeen.sorted()
+                    if (protos.isNotEmpty() && protos != listOf("TCP")) {
+                        append(" · протокол: ${protos.joinToString("/")}")
+                    }
+                },
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(
@@ -439,6 +445,15 @@ private fun SuspectCard(
                     "Рукопожатие: $it",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            if (suspect.sniSeen.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "TLS SNI: ${suspect.sniSeen.joinToString(", ")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
                     fontFamily = FontFamily.Monospace,
                 )
             }

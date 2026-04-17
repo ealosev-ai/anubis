@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 
@@ -68,6 +71,7 @@ class HoneypotListener(
     val running: kotlinx.coroutines.flow.StateFlow<Boolean> = _running
 
     private val serverSockets = mutableListOf<ServerSocket>()
+    private val datagramSockets = mutableListOf<DatagramSocket>()
     private val portJobs = mutableListOf<Job>()
 
     private fun bumpDebug(transform: (HoneypotDebug) -> HoneypotDebug) {
@@ -110,9 +114,38 @@ class HoneypotListener(
                 // accept-циклы бегут параллельно на каждой address family.
                 coroutineScopeLaunch(v4, port)
                 coroutineScopeLaunch(v6, port)
+
+                // UDP listeners — для QUIC/WireGuard-детектов методички.
+                // Не обязательно чтобы все TCP-порты бились на UDP, просто
+                // пробуем; нам важен не bind-успех, а накопление уникальных
+                // accept'ов по обоим протоколам.
+                val u4 = bindUdp(port, loopback4, label = "u4")
+                val u6 = loopback6?.let { bindUdp(port, it, label = "u6") }
+                udpLoopLaunch(u4, port)
+                udpLoopLaunch(u6, port)
             }
             portJobs += job
         }
+    }
+
+    private fun bindUdp(port: Int, addr: InetAddress, label: String): DatagramSocket? {
+        return try {
+            val sock = DatagramSocket(null).apply {
+                reuseAddress = true
+                bind(InetSocketAddress(addr, port))
+            }
+            synchronized(datagramSockets) { datagramSockets += sock }
+            Log.e(TAG, "udp bind port=$port/$label OK")
+            sock
+        } catch (e: Exception) {
+            Log.e(TAG, "udp bind port=$port/$label FAILED: ${e.message}")
+            null
+        }
+    }
+
+    private fun udpLoopLaunch(sock: DatagramSocket?, honeypotPort: Int) {
+        if (sock == null) return
+        scope.launch { udpReceiveLoop(sock, honeypotPort) }
     }
 
     private fun bind(port: Int, addr: InetAddress, label: String): ServerSocket? {
@@ -144,6 +177,12 @@ class HoneypotListener(
             }
             serverSockets.clear()
         }
+        synchronized(datagramSockets) {
+            for (s in datagramSockets) {
+                try { s.close() } catch (_: Exception) {}
+            }
+            datagramSockets.clear()
+        }
         for (j in portJobs) j.cancel()
         portJobs.clear()
         for (p in PORTS) _portStatus.tryEmit(PortStatus(p, PortState.STOPPED, null))
@@ -153,6 +192,53 @@ class HoneypotListener(
     fun shutdown() {
         stop()
         scope.cancel()
+    }
+
+    private suspend fun udpReceiveLoop(sock: DatagramSocket, honeypotPort: Int) {
+        val buf = ByteArray(4096)
+        while (_running.value && !sock.isClosed) {
+            val packet = DatagramPacket(buf, buf.size)
+            try {
+                withContext(Dispatchers.IO) { sock.receive(packet) }
+            } catch (_: Exception) {
+                return
+            }
+            val timestamp = System.currentTimeMillis()
+            val srcPort = packet.port
+            bumpDebug { it.copy(accepts = it.accepts + 1, lastAcceptMs = timestamp, lastAcceptPort = honeypotPort) }
+            Log.e(TAG, "udp recv port=$honeypotPort from :$srcPort len=${packet.length}")
+
+            // UID резолв синхронно — UDP-сокет клиента обычно живёт миг,
+            // после sendto() может быть уже закрыт. Пробуем сразу.
+            val (uid, pkg) = try {
+                resolver.resolveUdp(srcPort)
+            } catch (_: Exception) {
+                null to null
+            }
+
+            val preview = if (packet.length > 0) {
+                packet.data.copyOf(minOf(packet.length, 32)).toHexPreview()
+            } else null
+
+            bumpDebug {
+                it.copy(
+                    resolvedUids = if (uid != null) it.resolvedUids + 1 else it.resolvedUids,
+                    resolvedPkgs = if (pkg != null) it.resolvedPkgs + 1 else it.resolvedPkgs,
+                )
+            }
+
+            _hits.tryEmit(
+                AuditHit(
+                    timestampMs = timestamp,
+                    port = honeypotPort,
+                    uid = uid,
+                    packageName = pkg,
+                    handshakePreview = preview,
+                    sni = null,
+                    protocol = "UDP",
+                )
+            )
+        }
     }
 
     private suspend fun acceptLoop(srv: ServerSocket, honeypotPort: Int) {
@@ -188,24 +274,36 @@ class HoneypotListener(
         }
 
         // Теперь уже можно прочитать preview и закрыть — uid уже зарезолвлен.
-        // Если сканер послал SOCKS5 greeting (05 01 00) — отвечаем 05 00
-        // (ver=5, method=NO_AUTH). Без этого продвинутые сканеры (yourvpndead,
-        // RKNHardering) не классифицируют порт как реальный SOCKS5-прокси и
-        // могут не поднять тревогу. С ответом — сканер идёт дальше в handshake,
-        // мы ловим полноценный hit.
-        val preview: String? = try {
-            client.soTimeout = 300
-            val buf = ByteArray(16)
+        // Читаем до 2 KiB: достаточно чтобы в TLS ClientHello поместился SNI
+        // (hostname обычно в первом extension). На SOCKS5 greeting хватает и 3
+        // байт, так что большие буферы не мешают.
+        var preview: String? = null
+        var sni: String? = null
+        try {
+            client.soTimeout = 400
+            val buf = ByteArray(2048)
             val n = client.getInputStream().read(buf)
-            if (n >= 3 && buf[0] == 0x05.toByte() && buf[1] > 0) {
-                try {
-                    client.getOutputStream().write(byteArrayOf(0x05, 0x00))
-                    client.getOutputStream().flush()
-                } catch (_: Exception) {}
+            if (n > 0) {
+                preview = buf.copyOf(minOf(n, 32)).toHexPreview()
+
+                // TLS ClientHello: `16 03 XX` + ещё байты handshake.
+                // Парсер устойчив к мусору — либо SNI, либо null.
+                if (n >= 6 && buf[0] == 0x16.toByte() && buf[1] == 0x03.toByte()) {
+                    sni = try { extractSni(buf, n) } catch (_: Exception) { null }
+                }
+
+                // SOCKS5 greeting (05 01 NN) — отвечаем 05 00 (no auth),
+                // чтобы сканеры-детекторы классифицировали порт как реальный
+                // SOCKS5. Без ответа yourvpndead/RKNHardering не триггерят тревогу.
+                if (n >= 3 && buf[0] == 0x05.toByte() && buf[1] > 0) {
+                    try {
+                        client.getOutputStream().write(byteArrayOf(0x05, 0x00))
+                        client.getOutputStream().flush()
+                    } catch (_: Exception) {}
+                }
             }
-            if (n > 0) buf.copyOf(n).toHexPreview() else null
         } catch (_: Exception) {
-            null
+            // соединение закрыли до того как мы успели прочитать — норм
         }
         try { client.close() } catch (_: Exception) {}
         bumpDebug {
@@ -216,7 +314,7 @@ class HoneypotListener(
         }
         Log.e(
             TAG,
-            "hit port=$honeypotPort srcPort=$remotePort uid=$uid pkg=$pkg preview=$preview"
+            "hit port=$honeypotPort srcPort=$remotePort uid=$uid pkg=$pkg sni=$sni preview=$preview"
         )
 
         _hits.tryEmit(
@@ -226,6 +324,7 @@ class HoneypotListener(
                 uid = uid,
                 packageName = pkg,
                 handshakePreview = preview,
+                sni = sni,
             )
         )
     }
