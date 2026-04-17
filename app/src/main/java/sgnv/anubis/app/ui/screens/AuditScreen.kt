@@ -198,15 +198,7 @@ fun AuditScreen(
                         )
                     }
                     androidx.compose.material3.HorizontalDivider()
-                    Text(
-                        "Honor / MagicOS 10+ (Android 16): Настройки → Приложения → Anubis → " +
-                            "Батарея → «Ручное управление» → все тумблеры ON. Иначе система " +
-                            "убивает сервис в фоне.\n\nЕсли уведомление не появилось в шторке — " +
-                            "проверьте разрешение на уведомления в настройках приложения.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(16.dp),
-                    )
+                    BatteryOnboardingChecklist()
                 }
             }
         }
@@ -359,6 +351,127 @@ fun AuditScreen(
                     onMarkLocal = { auditViewModel.markSuspectAsLocal(suspect) },
                 )
                 Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Чек-лист что нужно сделать чтобы фоновый аудит реально жил на телефоне.
+ * Notifications и battery whitelist детектируем программно (LaunchedEffect
+ * перечитает при возврате с системного экрана через onResume). Honor
+ * «Запуск приложений» детектировать нельзя — только флажком «я сделал».
+ */
+@Composable
+private fun BatteryOnboardingChecklist() {
+    val context = LocalContext.current
+    val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
+
+    // Пересчитываем статусы когда Activity возвращается в RESUMED — пользователь
+    // мог только что переключить setting на системном экране.
+    var notificationsOk by remember {
+        mutableStateOf(sgnv.anubis.app.service.BatteryOnboarding.areNotificationsEnabled(context))
+    }
+    var batteryOk by remember {
+        mutableStateOf(sgnv.anubis.app.service.BatteryOnboarding.isIgnoringBatteryOptimizations(context))
+    }
+    var honorOk by remember {
+        mutableStateOf(sgnv.anubis.app.service.BatteryOnboarding.isHonorStartupConfirmed(context))
+    }
+    val isHonor = remember { sgnv.anubis.app.service.BatteryOnboarding.isHonorOrHuawei() }
+
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notificationsOk =
+                    sgnv.anubis.app.service.BatteryOnboarding.areNotificationsEnabled(context)
+                batteryOk =
+                    sgnv.anubis.app.service.BatteryOnboarding.isIgnoringBatteryOptimizations(context)
+                honorOk = sgnv.anubis.app.service.BatteryOnboarding.isHonorStartupConfirmed(context)
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    Column(Modifier.padding(16.dp)) {
+        Text(
+            "Что нужно проверить:",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+
+        ChecklistRow(
+            done = notificationsOk,
+            title = "Уведомления разрешены",
+            subtitle = "Без них не увидите ловушек в шторке",
+            actionLabel = "Открыть",
+            onAction = { sgnv.anubis.app.service.BatteryOnboarding.openAppNotificationSettings(context) },
+        )
+
+        ChecklistRow(
+            done = batteryOk,
+            title = "Оптимизация батареи отключена",
+            subtitle = "Иначе Doze mode усыпит ловушки ночью",
+            actionLabel = "Отключить",
+            onAction = { sgnv.anubis.app.service.BatteryOnboarding.requestBatteryWhitelist(context) },
+        )
+
+        if (isHonor) {
+            ChecklistRow(
+                done = honorOk,
+                title = "Honor: «Запуск приложений» — ручное управление",
+                subtitle = "MagicOS убивает сервис независимо от battery whitelist. " +
+                    "Откройте экран, найдите Anubis, переключите все тумблеры ON, " +
+                    "вернитесь сюда и отметьте что сделали.",
+                actionLabel = "Открыть",
+                onAction = { sgnv.anubis.app.service.BatteryOnboarding.openHonorStartupControl(context) },
+                showConfirmButton = !honorOk,
+                onConfirm = {
+                    sgnv.anubis.app.service.BatteryOnboarding.setHonorStartupConfirmed(context, true)
+                    honorOk = true
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChecklistRow(
+    done: Boolean,
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+    showConfirmButton: Boolean = false,
+    onConfirm: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            if (done) "✓ " else "○ ",
+            style = MaterialTheme.typography.titleMedium,
+            color = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(end = 8.dp, top = 2.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!done) {
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onAction) { Text(actionLabel) }
+                    if (showConfirmButton && onConfirm != null) {
+                        TextButton(onClick = onConfirm) { Text("✓ Сделал") }
+                    }
+                }
             }
         }
     }
