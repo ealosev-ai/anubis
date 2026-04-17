@@ -42,8 +42,10 @@ private const val TAG = "AuditHoneypot"
  */
 class HoneypotListener(
     private val shell: ShellExec,
+    native: NativeUidResolver? = null,
+    packages: PackageResolver? = null,
 ) {
-    private val resolver = UidResolver(shell)
+    private val resolver = UidResolver(shell, native, packages)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _hits = MutableSharedFlow<AuditHit>(
@@ -211,7 +213,7 @@ class HoneypotListener(
             // UID резолв синхронно — UDP-сокет клиента обычно живёт миг,
             // после sendto() может быть уже закрыт. Пробуем сразу.
             val (uid, pkg) = try {
-                resolver.resolveUdp(srcPort)
+                resolver.resolveUdp(srcPort, localHoneypotPort = honeypotPort)
             } catch (_: Exception) {
                 null to null
             }

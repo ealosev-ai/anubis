@@ -18,7 +18,11 @@ private const val TAG = "AuditResolver"
  *
  * Важно: кэшируем `uid -> pkg`, потому что `pm list` — тяжёлый вызов.
  */
-class UidResolver(private val shell: ShellExec) {
+class UidResolver(
+    private val shell: ShellExec,
+    private val native: NativeUidResolver? = null,
+    private val packages: PackageResolver? = null,
+) {
 
     private data class CacheEntry(val pkg: String?, val writtenAtMs: Long)
 
@@ -52,21 +56,29 @@ class UidResolver(private val shell: ShellExec) {
 
     /** Главная точка входа: по remote (клиентскому) порту → uid + pkg. */
     suspend fun resolve(remotePort: Int, localHoneypotPort: Int): Pair<Int?, String?> {
-        val uid = readUidFromProcNet(remotePort, localHoneypotPort)
-        val pkg = uid?.let { packageForUid(it) }
+        // Быстрый путь: ConnectivityManager (API 29+). Работает для связки
+        // два известных endpoint'а — ровно наш случай с honeypot.
+        val uid = native?.resolveTcp(remotePort, localHoneypotPort)
+            ?: readUidFromProcNet(remotePort, localHoneypotPort)
+        val pkg = uid?.let { resolvePackage(it) }
         return uid to pkg
     }
 
-    /**
-     * Резолв UDP-клиента. В отличие от TCP у UDP нет ESTABLISHED — клиентский
-     * сокет обычно unconnected (rem_address = 00000000:0000), поэтому искать
-     * надо по совпадению local_address:<srcPort> и отбрасывать нашу own-сторону
-     * (own uid), чтобы не вернуть себя.
-     */
-    suspend fun resolveUdp(srcPort: Int): Pair<Int?, String?> {
-        val uid = readUdpUidFromProcNet(srcPort)
-        val pkg = uid?.let { packageForUid(it) }
+    suspend fun resolveUdp(srcPort: Int, localHoneypotPort: Int = 0): Pair<Int?, String?> {
+        // Для connected-UDP сначала пробуем ConnectivityManager (если клиент
+        // сделал connect()). Unconnected sendto() — native вернёт null, идём
+        // через /proc/net/udp.
+        val uid = (if (localHoneypotPort != 0) native?.resolveUdp(srcPort, localHoneypotPort) else null)
+            ?: readUdpUidFromProcNet(srcPort)
+        val pkg = uid?.let { resolvePackage(it) }
         return uid to pkg
+    }
+
+    private suspend fun resolvePackage(uid: Int): String? {
+        // PackageManager.getPackagesForUid — работает в любом app. Shizuku
+        // `pm list packages --uid` нужен только если Android API вернул null
+        // (shared uid компонентов системы, etc).
+        return packages?.resolve(uid) ?: packageForUid(uid)
     }
 
     /**

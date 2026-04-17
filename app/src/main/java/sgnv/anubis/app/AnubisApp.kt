@@ -3,10 +3,14 @@ package sgnv.anubis.app
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
+import android.net.ConnectivityManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import sgnv.anubis.app.audit.AndroidNativeUidResolver
+import sgnv.anubis.app.audit.AndroidPackageResolver
 import sgnv.anubis.app.audit.AuditRepository
 import sgnv.anubis.app.audit.HoneypotListener
 import sgnv.anubis.app.data.db.AppDatabase
@@ -41,7 +45,17 @@ class AnubisApp : Application() {
      * listener реально может молотить сутками. AuditViewModel читает эти же
      * инстансы, так что UI при перезапуске подхватит накопленные suspects.
      */
-    val auditListener: HoneypotListener by lazy { HoneypotListener(shizukuManager) }
+    val auditListener: HoneypotListener by lazy {
+        // Native резолверы работают без Shizuku — быстрее и доступны всегда.
+        // ShizukuManager остаётся fallback'ом через /proc/net/tcp для случаев
+        // когда Android API вернул null (shared-uid, edge-case).
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        HoneypotListener(
+            shell = shizukuManager,
+            native = AndroidNativeUidResolver(cm),
+            packages = AndroidPackageResolver(packageManager),
+        )
+    }
     val auditRepository: AuditRepository by lazy {
         AuditRepository(appRepository, database.auditHitDao(), applicationScope)
     }
