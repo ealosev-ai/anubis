@@ -7,9 +7,14 @@ import sgnv.anubis.app.shizuku.ShizukuManager
 import sgnv.anubis.app.vpn.SelectedVpnClient
 import sgnv.anubis.app.vpn.VpnClientManager
 import sgnv.anubis.app.vpn.VpnControlMode
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * Core logic:
@@ -214,13 +219,21 @@ class StealthOrchestrator(
         return true
     }
 
-    private suspend fun freezeGroup(group: AppGroup) {
+    private suspend fun freezeGroup(group: AppGroup) = coroutineScope {
         val packages = repository.getPackagesByGroup(group)
-        for (pkg in packages) {
-            if (shizukuManager.isAppInstalled(pkg) && !shizukuManager.isAppFrozen(pkg)) {
-                shizukuManager.freezeApp(pkg)
+        // Параллельно, но с ограничением — Shizuku shell-uid процесс спавнит
+        // отдельный pm на каждый вызов, а PackageManager на 10+ одновременных
+        // disable-user уже начинает тормозить систему.
+        val sem = Semaphore(permits = FREEZE_PARALLELISM)
+        packages.map { pkg ->
+            async {
+                sem.withPermit {
+                    if (shizukuManager.isAppInstalled(pkg) && !shizukuManager.isAppFrozen(pkg)) {
+                        shizukuManager.freezeApp(pkg)
+                    }
+                }
             }
-        }
+        }.awaitAll()
     }
 
     private suspend fun waitForVpnOff(timeoutMs: Long): Boolean {
@@ -236,6 +249,10 @@ class StealthOrchestrator(
     private fun fail(message: String) {
         _lastError.value = message
         _state.value = StealthState.DISABLED
+    }
+
+    private companion object {
+        const val FREEZE_PARALLELISM = 4
     }
 }
 
