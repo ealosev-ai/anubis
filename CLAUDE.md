@@ -16,20 +16,53 @@ Release builds read `signing.properties` at the project root (`storeFile`, `stor
 ## Tests
 
 ```bash
-./gradlew testDebugUnitTest           # JVM unit tests (all modules)
-./gradlew connectedDebugAndroidTest   # instrumentation tests on connected device/AVD
+./gradlew testDebugUnitTest                                          # 79 JVM unit тестов, ~3s
+scripts/setup-avd-shizuku.sh && ./gradlew connectedDebugAndroidTest  # 12 instrumented, ~30s
 ```
 
-Unit tests live in `core-data/` (GroupsBackup) and `core-audit/` (parsers, honeypot smoke). Instrumented tests — в `app/src/androidTest/` (Room migrations, honeypot on-device, Shizuku e2e, FreezeActionReceiver).
+Скрипт `scripts/setup-avd-shizuku.sh` автоматизирует AVD setup — install Shizuku APK, запуск демона, install Anubis, grant Shizuku-permission через uiautomator. `--only-demon` — быстрый рестарт после ребута.
 
-Чтобы инструментированные тесты работали полноценно, AVD должен иметь запущенный Shizuku-demon + выданное разрешение Anubis. Автоматизация — `scripts/setup-avd-shizuku.sh`:
+### Where tests live
 
-```bash
-scripts/setup-avd-shizuku.sh              # полная настройка (install Shizuku + demon + grant)
-scripts/setup-avd-shizuku.sh --only-demon # только перезапустить demon после ребута AVD
-```
+| Путь | Что покрывает |
+|---|---|
+| `core-data/src/test/` | GroupsBackup JSON roundtrip (6 тестов) |
+| `core-audit/src/test/` | TlsSniParser, UidResolver, HoneypotListener smoke+lifecycle (20) |
+| `app/src/test/` | StealthOrchestrator, VpnClientManager, VpnClientControls, HitActionResolver, UpdateChecker.parseReleaseJson, UpdateInstaller hash (53) |
+| `app/src/androidTest/` | Room migrations, honeypot on-device, Shizuku e2e, FreezeActionReceiver, **E2E UI scenarios**: Stealth toggle/disable, Settings freeze-mode, Backup/Restore (12) |
 
-Без Shizuku тесты, которым он нужен, пропускаются через `Assume.assumeTrue`, сборка остаётся зелёной.
+### E2E UI scenario infra
+
+Для настоящих end-to-end UI тестов (MainActivity → ViewModel → Shizuku):
+- `AnubisTestRunner : AndroidJUnitRunner` — override `newApplication()` на `TestAnubisApp`. **Manifest `tools:replace` не работает** — инструментация стартует AUT в отдельном процессе, test APK manifest туда не прилетает.
+- `TestAnubisApp : AnubisApp` и `FakeVpnClientManager : VpnClientManager` — лежат в **`app/src/debug/java/`**, не в `androidTest`. Это важно: AUT classloader не видит test APK классы, а debug source set компилируется в target APK.
+- `FakeVpnClientManager` — shell no-op, NetworkCallback не регистрирует, `vpnActive` программно переключается через `setVpnActive(boolean)`.
+- `TestAnubisApp` override `createVpnClientManager()` → Fake; `startRuntimeMonitoring()` → no-op.
+
+Для того чтобы всё это работало, в прод-коде есть open hooks:
+- `open class AnubisApp` + `protected open fun createVpnClientManager()` / `startRuntimeMonitoring()`
+- `open class VpnClientManager` + `protected val _vpnActive` + `open` методы `startVPN` / `stopVPN` / `launchApp` / `startMonitoringVpn`
+
+### Testability interfaces
+
+Для unit-тестируемости сервисов извлечены узкие контракты:
+
+| Interface | Где | Реализует | Для чего |
+|---|---|---|---|
+| `ShellExec` | `:core-shizuku` | `ShizukuManager` | `runShell` + `execCommand`. UidResolver, VpnClientManager берут только его |
+| `FreezeActions` | `:core-shizuku` | `ShizukuManager` | `freeze`/`unfreeze`/`isAppFrozen`/etc. StealthOrchestrator, HitActionResolver берут его |
+| `VpnControls` | `:app/vpn` | `VpnClientManager` | `vpnActive` StateFlow + `startVPN`/`stopVPN`/`launchApp`/`refreshVpnState` |
+| `GroupsStore` | `:core-data` | `AppRepository` | `getAppsByGroup`/`setAppGroup`/`removeApp` — для GroupsBackup тестов |
+| `PackageGroupsReader` | `:core-data` | `AppRepository` | `getPackagesByGroup` — только read, StealthOrchestrator не видит writer-методов |
+| `NativeUidResolver` / `PackageResolver` | `:core-audit` | `AndroidNativeUidResolver` / `AndroidPackageResolver` | Быстрый путь резолва без Shizuku |
+
+Top-level extracted функции (для test без инстанса):
+- `extractVpnOwnerUid(dump: String): Int?` — dumpsys parser
+- `computeSha256Hex(File): String` — SHA-256 для UpdateInstaller
+- `UpdateChecker.parseReleaseJson(body, version)` — GitHub release JSON
+- `MIGRATION_3_4_EXPOSED` / `4_5` / `5_6` — для `AppDatabaseMigrationTest`
+
+Без Shizuku тесты (которым он нужен) пропускаются через `Assume.assumeTrue`, сборка остаётся зелёной.
 
 ## Important naming quirks
 
@@ -119,7 +152,7 @@ VPN liveness — `ConnectivityManager.NetworkCallback` на `TRANSPORT_VPN`. Own
 
 Хиты персистятся в Room (таблица `audit_hits`). `AuditRepository.exportAsJson` дампит для ShareSheet.
 
-`HitNotifier` читает `hit_action_mode` из prefs: `off` (только список), `ask` (нотификация с кнопками Заморозить/Отклонить), `auto` (замораживаем сразу, в нотификации «Разморозить»). Actions обрабатывает `FreezeActionReceiver` (manifest-registered, exported=false).
+`HitNotifier` делегирует на `HitActionResolver` (в `:app/audit/`) чистую логику выбора действия — off/ask/auto + skip-self/not-installed/already-frozen/freeze-failed. Сам notifier только рендерит `NotificationCompat`. Actions из нотификаций обрабатывает `FreezeActionReceiver` (manifest-registered, exported=false) — делает `setAppGroup(LOCAL)` + freeze/unfreeze через Shizuku.
 
 ### Auto-freeze / background paths
 

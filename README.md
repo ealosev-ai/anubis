@@ -1,134 +1,174 @@
 # Anubis
 
-Android app manager with VPN integration. Manages groups of apps by freezing/unfreezing them based on VPN connection state.
+Android-приложение, которое защищает пользователей от детекторов VPN в «особо бдительных» приложениях (банки, маркетплейсы, гос-сервисы) через **полное отключение** таких приложений на уровне системы, когда VPN активен.
 
-Unlike sandbox-based solutions (Island, Insular, Shelter), which only isolate apps in a work profile where they **can still detect VPN** through the shared network stack, Anubis uses `pm disable-user` to **completely disable** apps at the system level. A disabled app cannot run any code, detect any network interfaces, or send any data.
+В отличие от sandbox-решений (Island, Insular, Shelter), которые изолируют приложения в work profile, но оставляют им общий сетевой стек и возможность обнаружить VPN — Anubis использует `pm disable-user`, что делает приложение **нерабочим целиком**: оно не может запустить ни одного процесса, принять broadcast, получить доступ к сетевым интерфейсам или заметить наличие VPN.
 
-## Features
+## Фичи
 
-- **App groups** with different network policies:
-  - **Local** — apps frozen when VPN is active, launched without VPN
-  - **VPN Only** — apps frozen when VPN is inactive, launched through VPN
-  - **Launch with VPN** — never frozen, but launching triggers VPN activation
-- **Home screen launcher** — tap app icons to launch with correct VPN state
-  - Grayscale icons for frozen/disabled apps
-  - Long press for freeze/unfreeze, shortcut creation, group management
-- **VPN client orchestration** — auto start/stop for supported clients, any client works in manual mode
-- **Custom VPN client** — select any installed app as VPN client from the app list
-- **Active VPN client detection** — identifies which app owns the VPN via `dumpsys connectivity` owner UID
-- **Pinned shortcuts** — home screen shortcuts that orchestrate freeze/VPN/launch in one tap
-- **Network check** — ping, country, city (IP hidden by default for privacy)
-- **Quick Settings tile** — toggle from notification shade
-- **Auto-freeze on boot** and on app launch if VPN is already active
-- **VPN disconnect** — multi-step: API → dummy VPN takeover → force-stop → kill
+### Группы приложений
+- **LOCAL** — заморожено когда VPN включён, запускается без VPN (бизнес-приложения)
+- **VPN_ONLY** — заморожено когда VPN выключён, запускается через VPN
+- **LAUNCH_VPN** — никогда не замораживается, но тап по иконке форсирует включение VPN
 
-## How It Works
+### Стелс-режим
+- **Home screen launcher** — тап по иконке запускает приложение с правильным состоянием VPN
+- **Grayscale иконки** — визуально отличают замороженные приложения
+- **Long-press menu** — заморозить/разморозить вручную, создать shortcut, поменять группу
+- **Pinned shortcuts** — ярлыки на домашнем экране, которые одним тапом оркестрируют freeze/VPN/launch
+- **Quick Settings tile** — переключатель стелс-режима из шторки
+- **Auto-freeze** при загрузке, при запуске приложения и при переключении VPN вне Anubis
 
-### Freeze Mechanism
-Uses Shizuku to execute `pm disable-user --user 0 <package>` which completely disables an app at the OS level. The app cannot:
-- Run any background services
-- Receive broadcasts
-- Access network interfaces
-- Detect VPN or proxy
+### Аудит детекторов VPN (honeypot)
+- Поднимаем ServerSocket/DatagramSocket на localhost'е на портах из методички Минцифры (SOCKS5: 1080/9000/5555; Tor: 9050/9051/9150; HTTP CONNECT: 3128/8080/8888; xray: 10808/10809; Clash: 7890/9090; sing-box: 2080)
+- Когда приложение туда ломится — ловим uid через `/proc/net/tcp[6]` + резолвим pkg
+- **TLS ClientHello SNI capture** — если сканер пришёл HTTPS'ом, видим внешний хост (например `api.rshb.ru`)
+- **UDP honeypot** — ловим QUIC/WireGuard-сканеры отдельным listener'ом
+- **Decoy VPN** — soft-tun0 без блокировки трафика, провоцирует детекторы на скан localhost'а
+- **Auto-freeze при hit** — режимы OFF (только в списке), ASK (нотификация с кнопками), AUTO (моментальная заморозка + «Разморозить»)
+- **Экспорт лога** через ShareSheet в JSON
 
-This is fundamentally different from sandboxing, which still allows the app to run and inspect the network stack.
+### Режимы заморозки
+- **`pm disable-user`** (default) — надёжно, но шлёт `PACKAGE_REMOVED`, что ломает раскладку папок на лаунчерах Honor/MagicOS
+- **`pm suspend`** (Android 7+) — приложение при запуске показывает системный «приостановлено», папки лаунчера живут
+- Переключатель в Settings
 
-### VPN Start
-For clients with known API, sends shell commands via Shizuku:
-- **SEPARATE** (NekoBox): `am start` to exported QuickEnable/QuickDisable activities
-- **TOGGLE** (v2rayNG, Happ, v2rayTun, V2Box): `am broadcast` to widget receiver
-- **MANUAL** (any other client): opens the app, user connects manually
+### VPN-клиенты
+- **SEPARATE** (NekoBox) — отдельные `am start` для QuickEnable/QuickDisable
+- **TOGGLE** (v2rayNG, Happ, v2rayTun, V2Box) — `am broadcast` к widget receiver
+- **MANUAL** (Amnezia, любой пользовательский пакет) — просто открывается, пользователь подключается сам
+- **Автодетект активного VPN** через `dumpsys connectivity` + UID resolver — работает для любого клиента, не только known
 
-### VPN Stop
-Toggle commands are unreliable for stopping (can re-enable immediately), so Anubis uses a multi-step approach:
-1. **API stop** — only for SEPARATE clients with explicit stop command
-2. **Dummy VPN** — establish our own VPN to revoke theirs, then close ours
-3. **`am force-stop`** — kill the detected VPN app process
+### VPN disconnect (3-phase)
+Toggle-broadcast ненадёжен для остановки (может сразу включить обратно), поэтому:
+1. **API stop** — только SEPARATE-клиенты
+2. **Decoy VPN** — `VpnService.establish()` заставляет Android revoke чужой туннель, потом сразу закрывает свой
+3. **`am force-stop`** — убивает процесс VPN-приложения
 
-Apps are never unfrozen while VPN is still active.
+Приложения никогда не размораживаются пока VPN ещё активен.
 
-### VPN Detection
-Extracts the VPN network owner UID from `dumpsys connectivity` by matching `type: VPN[` pattern, then resolves UID → package name via `pm list packages --uid`. Works with any VPN client, including unknown/custom ones.
+### Self-update
+Проверка релизов через GitHub API. Источник настраивается: свой форк (default), upstream, off.
+- **SHA-256 верификация** скачанного APK перед установкой
+- Если SHA-256 указан в release notes — качаем в cache, сверяем, ставим через `FileProvider` + `ACTION_VIEW`
+- Нет SHA-256 — UI показывает warning и fallback в браузер
 
-## Supported VPN Clients
+### Дополнительно
+- **Backup/Restore** групп приложений в JSON через ShareSheet
+- **Network check** — ping, страна, город (IP скрыт по умолчанию)
+- **Recovery screen** — аварийная разморозка всех отключённых приложений, сброс групп
+- **Shizuku badge** на главном экране — цветная точка показывает статус демона
 
-| Client | Package | Control | Method |
-|--------|---------|---------|--------|
-| v2rayNG | `com.v2ray.ang` | Auto (toggle) | Widget broadcast |
-| NekoBox | `moe.nb4a` | Full (start/stop) | Exported activities |
-| Happ | `com.happproxy` | Auto (toggle) | Widget broadcast |
-| v2rayTun | `com.v2raytun.android` | Auto (toggle) | Widget broadcast |
-| V2Box | `dev.hexasoftware.v2box` | Auto (toggle) | Widget broadcast |
-| **Any app** | — | Manual | Select in Settings → "Other client" |
+## Как это работает
 
-### Discovering VPN Client APIs
+### Shizuku pipeline
+Все привилегированные действия идут через двухшаговый путь:
+1. `IUserService.aidl` в `:core-shizuku` определяет `execCommand` / `execCommandWithOutput`. `UserService` реализует их через `Runtime.getRuntime().exec(...)` внутри Shizuku-spawned shell-UID процесса. Процесс защищён drain-threads для stdout/stderr, 15-секундным timeout и лимитом вывода 2 MiB.
+2. `ShizukuManager` (singleton в `AnubisApp`) биндит service и предоставляет `freezeApp`, `unfreezeApp`, `isAppFrozen`, `isAppInstalled`, `runCommandWithOutput`, `execShellCommand`, `awaitUserService`.
 
-For closed-source clients, broadcast actions can be discovered via APK analysis using [jadx](https://github.com/skylot/jadx):
+Заморозка = `pm disable-user --user 0 <pkg>` или `pm suspend --user 0 <pkg>` (по настройке).
+Разморозка = `pm enable <pkg>` + `pm unsuspend --user 0 <pkg>` (идемпотентно, чтобы переключить режим на лету).
 
-1. **Resources** → find `app_widget_name` in `strings.xml` (resources are not obfuscated)
-2. **Manifest** → find `<receiver>` with `android.appwidget.provider` metadata → get class name
-3. **Receiver code** → find `setAction("...")` → this is the broadcast action
-4. **Verify** → check `onReceive()` for the `isRunning ? stop : start` toggle pattern
-
-All v2ray/xray forks share the same pattern:
+### Honeypot flow
 ```
-Action:   <package>.action.widget.click
-Receiver: <package>.receiver.WidgetProvider
+Приложение делает коннект на 127.0.0.1:1080
+  → HoneypotListener.acceptLoop принимает
+  → UidResolver.resolve(remotePort, 1080):
+      — Попытка 1: ConnectivityManager.getConnectionOwnerUid
+        (не работает на loopback без NETWORK_STACK permission)
+      — Попытка 2: shell `cat /proc/net/tcp6` через Shizuku
+        → парсер находит строку с uid
+  → PackageResolver.resolve(uid):
+      — Попытка 1: PackageManager.getPackagesForUid
+      — Попытка 2: shell `pm list packages --uid <uid>` через Shizuku
+  → AuditHit(port, uid, pkg, preview, sni?, protocol) → Room
+  → HitNotifier читает prefs `hit_action_mode`:
+      — OFF: только в AuditScreen
+      — ASK: нотификация с «Заморозить» / «Отклонить»
+      — AUTO: freezeApp() + нотификация с «Разморозить»
 ```
 
-Shell command to toggle:
-```shell
-am broadcast -a <package>.action.widget.click -n <package>/.receiver.WidgetProvider
-```
-
-This is standard Android IPC discovery, not reverse engineering of protected code. Broadcast actions are public interfaces by design.
-
-## Requirements
+## Требования
 
 - Android 10+ (API 29)
-- [Shizuku](https://shizuku.rikka.app/) installed and running
-- At least one VPN client installed
+- [Shizuku](https://shizuku.rikka.app/) установлен и запущен
+- Хотя бы один VPN-клиент установлен (v2rayNG, NekoBox, Happ, v2rayTun, V2Box, AmneziaVPN или любой другой в manual-режиме)
 
-## Setup
+## Установка
 
-1. Install and start Shizuku (via ADB or Wireless Debugging)
-2. Install Anubis
-3. Grant Shizuku permission when prompted
-4. Grant VPN permission when prompted (needed for dummy VPN disconnect)
-5. Go to **Apps** tab, assign apps to groups
-6. Select your VPN client in **Settings** (known or custom)
-7. Toggle stealth mode on the **Home** screen
+1. Установи и запусти Shizuku (через ADB или Wireless Debugging)
+2. Установи Anubis
+3. Разреши Shizuku-permission в диалоге
+4. Разреши VPN-permission (нужен для decoy-disconnect)
+5. Вкладка **Apps** — распределить приложения по группам (или «Автовыбор» для банков)
+6. Вкладка **Settings** — выбрать VPN-клиент
+7. Главный экран — переключатель стелс-режима
 
-## Building
+## Сборка
 
 ```bash
-./gradlew assembleDebug
-./gradlew assembleRelease  # requires signing config
+./gradlew assembleDebug        # debug APK
+./gradlew assembleRelease      # release APK, требует signing.properties
+./gradlew :app:lint            # Android lint
 ```
 
-Create `signing.properties` in project root:
+APK: `app/build/outputs/apk/<variant>/anubis-<versionName>-<variant>.apk`.
+
+Release-сборка читает `signing.properties` в корне проекта:
 ```properties
 storeFile=release.keystore
-storePassword=your_password
-keyAlias=your_alias
-keyPassword=your_password
+storePassword=...
+keyAlias=...
+keyPassword=...
 ```
 
-## Tech Stack
+Debug-вариант имеет `applicationIdSuffix=".debug"` — её можно держать одновременно с release-сборкой автора на одном устройстве.
 
+## Тесты
+
+```bash
+./gradlew testDebugUnitTest                                          # 79 JVM unit тестов, ~3 сек
+scripts/setup-avd-shizuku.sh && ./gradlew connectedDebugAndroidTest  # 12 на AVD, ~30 сек
+```
+
+Скрипт `scripts/setup-avd-shizuku.sh` автоматизирует настройку AVD: скачивает Shizuku APK, поднимает демона, устанавливает Anubis и грантит Shizuku-permission через uiautomator.
+
+Подробнее про тесты и архитектуру в [CLAUDE.md](./CLAUDE.md).
+
+## Архитектура
+
+Проект разбит на 4 Gradle-модуля:
+
+| Модуль | Ответственность |
+|---|---|
+| `:app` | UI (Jetpack Compose), ViewModels, AnubisApp, сервисы, MainActivity |
+| `:core-shizuku` | ShizukuManager, UserService, ShellExec, AIDL |
+| `:core-data` | Room: AppDatabase, DAOs, migrations, entities, repositories |
+| `:core-audit` | Honeypot listener, парсеры (TLS SNI, UID, dumpsys), AuditRepository |
+
+Связи: `:app` → `:core-audit` → `:core-shizuku` + `:core-data`.
+
+Технологии:
 - Kotlin + Jetpack Compose (Material 3)
-- Shizuku API 13.1.5 (AIDL UserService pattern)
-- Room database with TypeConverters (app groups)
-- ConnectivityManager NetworkCallback (VPN state monitoring)
+- Shizuku API 13.1.5 (AIDL UserService)
+- Room 2.7.2 + KSP 2.3.2
+- ConnectivityManager NetworkCallback
 - ShortcutManager (pinned shortcuts)
+- Coroutines + StateFlow/SharedFlow
 
 ## Roadmap
 
-- [ ] Background VPN monitoring service (optional, for auto-freeze when VPN is toggled outside Anubis)
-- [ ] Self-hosted `app_process` daemon to remove Shizuku dependency
-- [ ] Export/import app group configuration
-- [ ] Additional VPN clients (WireGuard, sing-box, etc.)
+- [x] Background VPN monitoring service
+- [x] Export/import app group configuration
+- [x] Audit honeypot против детекторов VPN
+- [x] `pm suspend` режим для Honor/MagicOS
+- [x] Self-update с SHA-256 проверкой
+- [x] Multi-module архитектура
+- [x] E2E scenarios + unit coverage (91 тест)
+- [ ] Self-hosted `app_process` demon для жизни без Shizuku
+- [ ] UDP honeypot для QUIC (частично: только при `connect()` клиенте)
+- [ ] Дополнительные VPN-клиенты (WireGuard, sing-box, Hiddify)
 
-## License
+## Лицензия
 
 MIT
