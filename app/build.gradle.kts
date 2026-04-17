@@ -117,6 +117,9 @@ dependencies {
     // mockito-core — только для Context mock в StealthOrchestratorTest
     // (Orchestrator принимает Context но его не использует при unit-сценариях).
     testImplementation("org.mockito:mockito-core:5.12.0")
+    // org.json на Android — stub в JVM unit-тестах; настоящая реализация
+    // нужна для UpdateCheckerParseTest.
+    testImplementation("org.json:json:20240303")
 
     // Instrumentation-тесты: бегут на реальном устройстве/эмуляторе.
     // Room-testing даёт MigrationTestHelper для проверки миграций против

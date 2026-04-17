@@ -98,46 +98,57 @@ object UpdateChecker {
             if (code !in 200..299) return@withContext null
 
             val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(body)
-
-            val tagName = json.optString("tag_name").trimStart('v')
-            val htmlUrl = json.optString("html_url")
-            val rawNotes = json.optString("body")
-            val notes = rawNotes.take(2000)
-            // SHA-256 публикуем в release notes строкой `SHA256: <hex>` — это
-            // тот же автор релиза подписывает артефакт, которому ссылка на APK
-            // всё равно доверяет. Если ссылку подменят (MITM на github CDN) —
-            // хеш не совпадёт и установщик не запустится.
-            val sha256 = Regex("""SHA-?256[:\s]+([A-Fa-f0-9]{64})""")
-                .find(rawNotes)?.groupValues?.get(1)?.lowercase()
-            val apkUrl = json.optJSONArray("assets")?.let { assets ->
-                var found: String? = null
-                for (i in 0 until assets.length()) {
-                    val a = assets.getJSONObject(i)
-                    val name = a.optString("name")
-                    if (name.endsWith(".apk", ignoreCase = true) &&
-                        !name.contains("debug", ignoreCase = true)
-                    ) {
-                        found = a.optString("browser_download_url")
-                        break
-                    }
-                }
-                found
-            }
-
+            val info = parseReleaseJson(body, BuildConfig.VERSION_NAME) ?: return@withContext null
             prefs.edit().putLong(KEY_LAST_CHECK_MS, now).apply()
-
-            UpdateInfo(
-                latestVersion = tagName,
-                currentVersion = BuildConfig.VERSION_NAME,
-                releaseUrl = htmlUrl,
-                apkUrl = apkUrl,
-                releaseNotes = notes,
-                apkSha256 = sha256,
-            )
+            info
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * Чистая функция: GitHub release JSON → [UpdateInfo] или null если не парсится.
+     * Вынесена для unit-тестирования (без HTTP/Context).
+     *
+     * Правила:
+     *  - `tag_name` с ведущим `v` → `latestVersion` без `v`.
+     *  - В assets ищем первый `.apk` без `debug` в имени — это наш release APK.
+     *    Нет подходящего ассета → `apkUrl = null` (пользователь откроет release-страницу).
+     *  - В `body` ищем строку `SHA-256: <64 hex>` (регистронезависимо, тире опционален)
+     *    → `apkSha256` в lowercase. Это даёт верификацию целостности APK при установке.
+     *  - Notes обрезаются до 2000 символов чтобы диалог не распирало.
+     */
+    internal fun parseReleaseJson(body: String, currentVersion: String): UpdateInfo? {
+        val json = try { JSONObject(body) } catch (_: Exception) { return null }
+        val tagName = json.optString("tag_name").takeIf { it.isNotBlank() }?.trimStart('v')
+            ?: return null
+        val htmlUrl = json.optString("html_url")
+        val rawNotes = json.optString("body")
+        val notes = rawNotes.take(2000)
+        val sha256 = Regex("""SHA-?256[:\s]+([A-Fa-f0-9]{64})""", RegexOption.IGNORE_CASE)
+            .find(rawNotes)?.groupValues?.get(1)?.lowercase()
+        val apkUrl = json.optJSONArray("assets")?.let { assets ->
+            var found: String? = null
+            for (i in 0 until assets.length()) {
+                val a = assets.getJSONObject(i)
+                val name = a.optString("name")
+                if (name.endsWith(".apk", ignoreCase = true) &&
+                    !name.contains("debug", ignoreCase = true)
+                ) {
+                    found = a.optString("browser_download_url")
+                    break
+                }
+            }
+            found
+        }
+        return UpdateInfo(
+            latestVersion = tagName,
+            currentVersion = currentVersion,
+            releaseUrl = htmlUrl,
+            apkUrl = apkUrl,
+            releaseNotes = notes,
+            apkSha256 = sha256,
+        )
     }
 
     /**

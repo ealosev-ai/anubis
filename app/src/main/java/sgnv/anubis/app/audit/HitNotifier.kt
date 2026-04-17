@@ -14,7 +14,7 @@ import sgnv.anubis.app.AnubisApp
 import sgnv.anubis.app.R
 import sgnv.anubis.app.audit.model.AuditHit
 import sgnv.anubis.app.service.FreezeActionReceiver
-import sgnv.anubis.app.shizuku.ShizukuManager
+import sgnv.anubis.app.shizuku.FreezeActions
 
 /**
  * При каждом honeypot-хите с резолвенным pkg шлём нотификацию с actions:
@@ -33,9 +33,15 @@ class HitNotifier(
     private val context: Context,
     private val scope: CoroutineScope,
     private val hits: SharedFlow<AuditHit>,
-    private val shizuku: ShizukuManager,
+    shizuku: FreezeActions,
 ) {
     enum class Mode { OFF, ASK, AUTO }
+
+    private val resolver = HitActionResolver(
+        freeze = shizuku,
+        selfPackage = context.packageName,
+        modeProvider = ::currentMode,
+    )
 
     fun start() {
         scope.launch {
@@ -44,26 +50,11 @@ class HitNotifier(
     }
 
     private suspend fun handle(hit: AuditHit) {
-        val mode = currentMode()
-        if (mode == Mode.OFF) return
-
-        val pkg = hit.packageName ?: return
-        if (pkg == context.packageName) return
-        if (!shizuku.isAppInstalled(pkg)) return
-
-        when (mode) {
-            Mode.ASK -> notifyAsk(pkg, hit)
-            Mode.AUTO -> {
-                if (!shizuku.isAppFrozen(pkg)) {
-                    val r = shizuku.freezeApp(pkg)
-                    if (r.isFailure) {
-                        Log.w(TAG, "auto-freeze: не удалось заморозить $pkg", r.exceptionOrNull())
-                        return
-                    }
-                }
-                notifyAuto(pkg, hit)
-            }
-            Mode.OFF -> Unit
+        when (val action = resolver.decide(hit)) {
+            HitActionResolver.Action.Skip -> Unit
+            is HitActionResolver.Action.ShowAsk -> notifyAsk(action.pkg, action.hit)
+            is HitActionResolver.Action.ShowAuto -> notifyAuto(action.pkg, action.hit)
+            is HitActionResolver.Action.FreezeFailed -> Unit  // лог уже в resolver
         }
     }
 
