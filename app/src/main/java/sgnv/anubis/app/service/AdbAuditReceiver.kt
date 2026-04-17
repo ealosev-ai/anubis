@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
-import sgnv.anubis.app.AnubisApp
 
 /**
  * ADB-управление аудит-режимом без тапов в UI.
@@ -33,18 +32,15 @@ import sgnv.anubis.app.AnubisApp
  */
 class AdbAuditReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val app = context.applicationContext as AnubisApp
         when (intent.action) {
             ACTION_ENABLE -> {
                 Log.e(TAG, "ENABLE_AUDIT via ADB broadcast")
                 requestBatteryWhitelist(context)
-                StealthVpnService.startDecoy(context)
-                app.auditListener.start()
+                AuditController.start(context, persistPreference = true)
             }
             ACTION_DISABLE -> {
                 Log.e(TAG, "DISABLE_AUDIT via ADB broadcast")
-                app.auditListener.stop()
-                StealthVpnService.stopDecoy(context)
+                AuditController.stop(context, persistPreference = true)
             }
             else -> Log.w(TAG, "unknown action: ${intent.action}")
         }

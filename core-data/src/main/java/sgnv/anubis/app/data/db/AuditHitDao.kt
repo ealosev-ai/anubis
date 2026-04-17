@@ -23,4 +23,7 @@ interface AuditHitDao {
 
     @Query("DELETE FROM audit_hits WHERE timestampMs < :olderThan")
     suspend fun purgeOlderThan(olderThan: Long)
+
+    @Query("SELECT COUNT(*) FROM audit_hits WHERE timestampMs >= :sinceMs")
+    fun countSinceFlow(sinceMs: Long): Flow<Int>
 }
