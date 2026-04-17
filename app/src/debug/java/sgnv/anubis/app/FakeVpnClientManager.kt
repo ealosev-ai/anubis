@@ -32,6 +32,13 @@ class FakeVpnClientManager(
         // Намеренно no-op: не регистрируем NetworkCallback в тестах.
     }
 
+    override fun refreshVpnState() {
+        // Fake держит состояние программно. Если бы унаследовали родительскую
+        // реализацию — она бы читала настоящий ConnectivityManager AVD
+        // (там VPN не поднят), затёрла бы _vpnActive обратно в false сразу
+        // после того как мы его выставили в startVPN.
+    }
+
     /** Программно симулировать что внешний VPN поднялся / упал. */
     fun setVpnActive(active: Boolean) {
         _vpnActive.value = active

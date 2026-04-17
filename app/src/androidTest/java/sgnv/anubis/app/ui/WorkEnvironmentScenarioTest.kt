@@ -36,14 +36,12 @@ class WorkEnvironmentScenarioTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
-    // "банк" — реальный установленный пакет, мы его реально замораживаем/размораживаем.
+    // "банк" — реальный установленный пакет, реально замораживаем/размораживаем.
     private val localPkg = "moe.shizuku.privileged.api"
-    // "Telegram" — фиктивный пакет; isAppInstalled=false, freeze/unfreeze для него
-    // скипнется внутри freezeGroup/unfreezeAll. Проверяем только маршрутизацию
-    // state-машины (setAppGroup → в список обрабатывается). Нельзя ставить сюда
-    // реально установленный — если поставить sgnv.anubis.app.debug (наш процесс),
-    // disableWorkEnvironment заморозит нас ПОСРЕДИ теста → crash.
-    private val vpnPkg = "com.anubis.fictional.vpn_${System.currentTimeMillis()}"
+    // "Telegram" — тоже реальный пакет (deskclock есть на AVD). Важно чтобы он
+    // был НЕ нашим собственным (заморозка своего процесса → crash) и не был
+    // критическим — deskclock freeze'ится/unfreeze'ится без последствий.
+    private val vpnPkg = "com.google.android.deskclock"
 
     private val app: AnubisApp by lazy {
         InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as AnubisApp
@@ -76,7 +74,7 @@ class WorkEnvironmentScenarioTest {
 
     @Test
     fun enable_work_env_freezes_LOCAL_starts_vpn_unfreezes_and_launches_VPN_apps() = runBlocking {
-        val client = SelectedVpnClient.fromKnown(VpnClientType.V2RAY_NG)
+        val client = SelectedVpnClient.fromKnown(VpnClientType.NEKO_BOX)
         app.orchestrator.enableWorkEnvironment(client)
 
         assertEquals(StealthState.ENABLED, app.orchestrator.state.value)
@@ -92,7 +90,7 @@ class WorkEnvironmentScenarioTest {
 
     @Test
     fun disable_work_env_freezes_vpn_apps_then_unfreezes_LOCAL() = runBlocking {
-        val client = SelectedVpnClient.fromKnown(VpnClientType.V2RAY_NG)
+        val client = SelectedVpnClient.fromKnown(VpnClientType.NEKO_BOX)
         // Сначала поднять окружение
         app.orchestrator.enableWorkEnvironment(client)
         assertEquals(StealthState.ENABLED, app.orchestrator.state.value)
