@@ -42,6 +42,11 @@ import androidx.compose.ui.unit.dp
 import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuStatus
 import sgnv.anubis.app.ui.MainViewModel
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import sgnv.anubis.app.vpn.SelectedVpnClient
 import sgnv.anubis.app.vpn.VpnClientControls
 import sgnv.anubis.app.vpn.VpnClientType
@@ -229,6 +234,40 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(24.dp))
 
+        // Hit action mode (audit → freeze)
+        Text("При обнаружении сканера", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Что делать когда honeypot ловит приложение, которое сканит " +
+                "ваши VPN-порты. Действия обратимы — через RecoveryScreen или " +
+                "экран «Приложения».",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        val hitMode by viewModel.hitActionMode.collectAsState()
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                HitActionRow(
+                    title = "Ничего",
+                    subtitle = "только показываем в списке «Пойманные»",
+                    selected = hitMode == "off",
+                ) { viewModel.setHitActionMode("off") }
+                HitActionRow(
+                    title = "Спрашивать",
+                    subtitle = "нотификация с кнопками «Заморозить» / «Отклонить»",
+                    selected = hitMode == "ask",
+                ) { viewModel.setHitActionMode("ask") }
+                HitActionRow(
+                    title = "Замораживать сразу",
+                    subtitle = "добавить в LOCAL и заморозить; нотификация с кнопкой «Разморозить»",
+                    selected = hitMode == "auto",
+                ) { viewModel.setHitActionMode("auto") }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
         // Background monitoring
         Text("Мониторинг", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
@@ -278,6 +317,11 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(24.dp))
+
+        // Backup / Restore groups
+        BackupRestoreSection(viewModel = viewModel)
+
+        Spacer(Modifier.height(12.dp))
 
         // Recovery entry
         Card(
@@ -364,6 +408,37 @@ fun SettingsScreen(
                         checked = updateCheckEnabled,
                         onCheckedChange = { viewModel.setUpdateCheckEnabled(it) }
                     )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Источник обновлений — по умолчанию свой форк,
+                // тянуть upstream автоматически нельзя (форк сильно разошёлся).
+                val updateSource by viewModel.updateSource.collectAsState()
+                Text(
+                    "Источник обновлений",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(
+                        "fork" to "Мой форк",
+                        "upstream" to "Upstream",
+                        "off" to "Выкл.",
+                    ).forEach { (key, label) ->
+                        Row(
+                            modifier = Modifier
+                                .clickable { viewModel.setUpdateSource(key) }
+                                .padding(end = 12.dp, top = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = updateSource == key,
+                                onClick = { viewModel.setUpdateSource(key) },
+                            )
+                            Text(label, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -465,4 +540,91 @@ fun SettingsScreen(
         }
     }
 
+}
+
+@Composable
+private fun BackupRestoreSection(viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            val json = try {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            } catch (_: Exception) { null }
+            if (json == null) {
+                status = "Не удалось прочитать файл"
+                return@launch
+            }
+            val n = viewModel.importGroupsJson(json, replaceAll = false)
+            status = if (n < 0) "Битый JSON" else "Импортировано записей: $n"
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Бекап групп", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                "Экспортировать списки LOCAL/VPN_ONLY/LAUNCH_VPN в JSON, " +
+                    "или восстановить из ранее сохранённого файла.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row {
+                TextButton(onClick = {
+                    coroutineScope.launch {
+                        val json = viewModel.exportGroupsJson()
+                        val share = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_TEXT, json)
+                            putExtra(Intent.EXTRA_SUBJECT, "anubis-groups-${System.currentTimeMillis()}.json")
+                        }
+                        context.startActivity(
+                            Intent.createChooser(share, "Экспорт групп")
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }) { Text("Экспорт") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = {
+                    importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                }) { Text("Импорт…") }
+            }
+            status?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HitActionRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        RadioButton(selected = selected, onClick = onClick)
+    }
 }

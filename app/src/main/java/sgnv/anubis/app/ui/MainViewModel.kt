@@ -10,6 +10,7 @@ import sgnv.anubis.app.data.model.AppGroup
 import sgnv.anubis.app.data.model.InstalledAppInfo
 import sgnv.anubis.app.data.model.ManagedApp
 import sgnv.anubis.app.data.model.NetworkInfo
+import sgnv.anubis.app.data.repository.GroupsBackup
 import sgnv.anubis.app.service.StealthState
 import sgnv.anubis.app.service.StealthVpnService
 import sgnv.anubis.app.service.VpnMonitorService
@@ -85,6 +86,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _freezeMode = MutableStateFlow(shizukuManager.freezeMode)
     val freezeMode: StateFlow<FreezeMode> = _freezeMode
+
+    private val _hitActionMode = MutableStateFlow(loadHitActionMode())
+    val hitActionMode: StateFlow<String> = _hitActionMode
+
+    private val _updateSource = MutableStateFlow(UpdateChecker.getSource(application))
+    val updateSource: StateFlow<String> = _updateSource
 
     private val _dangerousAppWarning = MutableStateFlow<String?>(null)
     val dangerousAppWarning: StateFlow<String?> = _dangerousAppWarning
@@ -338,6 +345,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return try {
             getApplication<Application>().packageManager.getApplicationInfo(packageName, 0).enabled
         } catch (e: Exception) { false }
+    }
+
+    suspend fun exportGroupsJson(): String = GroupsBackup.export(repository)
+
+    /**
+     * @param replaceAll если true — сначала чистим все managed_apps, потом применяем.
+     *                   false (merge) — только обновляем существующие + добавляем новые.
+     * @return количество применённых записей, или -1 при битом JSON.
+     */
+    suspend fun importGroupsJson(json: String, replaceAll: Boolean): Int {
+        val n = if (replaceAll) GroupsBackup.replaceAll(repository, json)
+        else GroupsBackup.import(repository, json)
+        if (n >= 0) {
+            // Перечитаем группы в _localApps / _vpnOnlyApps / _launchVpnApps.
+            loadGroupedApps()
+        }
+        return n
+    }
+
+    fun setUpdateSource(source: String) {
+        UpdateChecker.setSource(getApplication(), source)
+        _updateSource.value = UpdateChecker.getSource(getApplication())
+    }
+
+    fun setHitActionMode(mode: String) {
+        val normalized = if (mode in setOf("off", "ask", "auto")) mode else "off"
+        _hitActionMode.value = normalized
+        getApplication<Application>()
+            .getSharedPreferences("settings", Context.MODE_PRIVATE)
+            .edit().putString("hit_action_mode", normalized).apply()
+    }
+
+    private fun loadHitActionMode(): String {
+        return getApplication<Application>()
+            .getSharedPreferences("settings", Context.MODE_PRIVATE)
+            .getString("hit_action_mode", "off") ?: "off"
     }
 
     fun setFreezeMode(mode: FreezeMode) {

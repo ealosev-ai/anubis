@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import sgnv.anubis.app.audit.AndroidNativeUidResolver
 import sgnv.anubis.app.audit.AndroidPackageResolver
 import sgnv.anubis.app.audit.AuditRepository
+import sgnv.anubis.app.audit.HitNotifier
 import sgnv.anubis.app.audit.HoneypotListener
 import sgnv.anubis.app.data.db.AppDatabase
 import sgnv.anubis.app.data.repository.AppRepository
@@ -89,6 +90,16 @@ class AnubisApp : Application() {
         applicationScope.launch {
             auditListener.hits.collect { hit -> auditRepository.recordHit(hit) }
         }
+
+        // Нотификации по хитам: в режиме ASK — спрашиваем «Заморозить? | Отклонить»;
+        // в AUTO — фризим сразу и показываем «Разморозить». OFF — ничего не шлём
+        // (hits всё равно копятся в AuditRepository для UI).
+        HitNotifier(
+            context = this,
+            scope = applicationScope,
+            hits = auditListener.hits,
+            shizuku = shizukuManager,
+        ).start()
     }
 
     override fun onTerminate() {

@@ -73,6 +73,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- Обрабатывает Freeze/Unfreeze/Dismiss actions из hit-нотификаций. -->
+        <receiver
+            android:name=".service.FreezeActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="sgnv.anubis.app.FREEZE_HIT" />
+                <action android:name="sgnv.anubis.app.UNFREEZE_HIT" />
+                <action android:name="sgnv.anubis.app.DISMISS_HIT" />
+            </intent-filter>
+        </receiver>
+
         <!--
           ADB-управление аудит-режимом: permission DUMP держит только shell,
           чужие приложения без root этот broadcast послать не могут.
