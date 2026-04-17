@@ -10,16 +10,14 @@ import sgnv.anubis.app.data.model.AppGroup
 import sgnv.anubis.app.data.model.InstalledAppInfo
 import sgnv.anubis.app.data.model.ManagedApp
 import sgnv.anubis.app.data.model.NetworkInfo
-import sgnv.anubis.app.data.repository.AppRepository
-import sgnv.anubis.app.service.StealthOrchestrator
 import sgnv.anubis.app.service.StealthState
 import sgnv.anubis.app.service.StealthVpnService
 import sgnv.anubis.app.service.VpnMonitorService
+import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuStatus
 import sgnv.anubis.app.update.UpdateChecker
 import sgnv.anubis.app.update.UpdateInfo
 import sgnv.anubis.app.vpn.SelectedVpnClient
-import sgnv.anubis.app.vpn.VpnClientManager
 import sgnv.anubis.app.vpn.VpnClientType
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -43,9 +41,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as AnubisApp
     val shizukuManager = app.shizukuManager
-    private val vpnClientManager = VpnClientManager(application, shizukuManager)
-    private val repository = AppRepository(app.database.managedAppDao(), application)
-    private val orchestrator = StealthOrchestrator(application, shizukuManager, vpnClientManager, repository)
+    private val vpnClientManager = app.vpnClientManager
+    private val repository = app.appRepository
+    private val orchestrator = app.orchestrator
 
     val stealthState: StateFlow<StealthState> = orchestrator.state
     val lastError: StateFlow<String?> = orchestrator.lastError
@@ -85,6 +83,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _backgroundMonitoring = MutableStateFlow(false)
     val backgroundMonitoring: StateFlow<Boolean> = _backgroundMonitoring
 
+    private val _freezeMode = MutableStateFlow(shizukuManager.freezeMode)
+    val freezeMode: StateFlow<FreezeMode> = _freezeMode
+
     private val _dangerousAppWarning = MutableStateFlow<String?>(null)
     val dangerousAppWarning: StateFlow<String?> = _dangerousAppWarning
 
@@ -101,7 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val resetCompleted: SharedFlow<Int> = _resetCompleted
 
     init {
-        vpnClientManager.startMonitoringVpn()
+        // Мониторинг VPN стартует в AnubisApp.onCreate — здесь не дублируем.
         refreshVpnClients()
         loadSelectedClient()
         loadInstalledApps()
@@ -339,6 +340,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { false }
     }
 
+    fun setFreezeMode(mode: FreezeMode) {
+        shizukuManager.freezeMode = mode
+        _freezeMode.value = mode
+        getApplication<Application>()
+            .getSharedPreferences("settings", Context.MODE_PRIVATE)
+            .edit()
+            .putString(
+                "freeze_mode",
+                when (mode) {
+                    FreezeMode.SUSPEND -> "suspend"
+                    FreezeMode.DISABLE_USER -> "disable"
+                },
+            )
+            .apply()
+    }
+
     fun setBackgroundMonitoring(enabled: Boolean) {
         _backgroundMonitoring.value = enabled
         val app = getApplication<Application>()
@@ -522,7 +539,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
-        vpnClientManager.stopMonitoringVpn()
+        // Мониторинг VPN живёт на Application-уровне — ViewModel больше его не дергает.
         super.onCleared()
     }
 }
