@@ -67,8 +67,11 @@ class StealthDisableScenarioTest {
     fun disable_transitions_to_DISABLED_and_freezes_VPN_ONLY_group() = runBlocking {
         assertEquals(StealthState.ENABLED, app.orchestrator.state.value)
 
+        // NEKO_BOX (SEPARATE) — stopVpn() зовёт stopVPN(client) напрямую.
+        // V2RAY_NG (TOGGLE) идёт через decoy-VPN revoke + force-stop, что в
+        // инструментированном тесте без VpnService-permission не срабатывает.
         app.orchestrator.disable(
-            client = SelectedVpnClient.fromKnown(VpnClientType.V2RAY_NG),
+            client = SelectedVpnClient.fromKnown(VpnClientType.NEKO_BOX),
             detectedPackage = null,
         )
 
