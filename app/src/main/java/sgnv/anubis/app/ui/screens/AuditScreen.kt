@@ -11,9 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -78,6 +77,7 @@ fun AuditScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -141,12 +141,12 @@ fun AuditScreen(
                 Button(
                     onClick = { auditViewModel.start() },
                     modifier = Modifier.weight(1f),
-                ) { Text("Начать аудит") }
+                ) { Text("Старт") }
             } else {
                 FilledTonalButton(
                     onClick = { auditViewModel.stop() },
                     modifier = Modifier.weight(1f),
-                ) { Text("Остановить") }
+                ) { Text("Стоп") }
             }
             OutlinedButton(
                 onClick = {
@@ -166,9 +166,11 @@ fun AuditScreen(
                         )
                     }
                 },
+                modifier = Modifier.weight(1f),
             ) { Text("Экспорт") }
             OutlinedButton(
                 onClick = { auditViewModel.clearHits() },
+                modifier = Modifier.weight(1f),
             ) { Text("Очистить") }
         }
 
@@ -218,16 +220,16 @@ fun AuditScreen(
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(8.dp))
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(suspects, key = { it.groupKey }) { suspect ->
-                    SuspectCard(
-                        suspect = suspect,
-                        labelFor = auditViewModel::labelFor,
-                        onMarkLocal = { auditViewModel.markSuspectAsLocal(suspect) },
-                    )
-                }
+            // Column вместо LazyColumn: родительский Column уже verticalScroll,
+            // nested LazyColumn даёт "infinite height constraints" краш.
+            // Suspects — 0..~20, перерисовка всех на update не узкое место.
+            for (suspect in suspects) {
+                SuspectCard(
+                    suspect = suspect,
+                    labelFor = auditViewModel::labelFor,
+                    onMarkLocal = { auditViewModel.markSuspectAsLocal(suspect) },
+                )
+                Spacer(Modifier.height(8.dp))
             }
         }
     }
