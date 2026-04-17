@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import sgnv.anubis.app.service.AuditController
 import sgnv.anubis.app.service.VpnMonitorService
 import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuManager
@@ -41,8 +42,20 @@ class SettingsController(
     private val _hitActionMode = MutableStateFlow(loadHitActionMode())
     val hitActionMode: StateFlow<String> = _hitActionMode
 
+    private val _auditBackground = MutableStateFlow(AuditController.isBackgroundEnabled(context))
+    val auditBackground: StateFlow<Boolean> = _auditBackground
+
+    private val _auditDecoyWithBackground = MutableStateFlow(
+        AuditController.isDecoyWithBackgroundEnabled(context),
+    )
+    val auditDecoyWithBackground: StateFlow<Boolean> = _auditDecoyWithBackground
+
     init {
         if (_backgroundMonitoring.value) VpnMonitorService.start(context)
+        // AuditController.start в BootReceiver уже поднимет сервис при перезагрузке.
+        // Здесь поднимаем при «холодном» старте app — если флаг был включён, но
+        // сервис почему-то не жив (swipe recents, сбой Honor battery).
+        if (_auditBackground.value) AuditController.start(context, persistPreference = false)
         refreshVpnClients()
     }
 
@@ -75,6 +88,20 @@ class SettingsController(
             FreezeMode.DISABLE_USER -> "disable"
         }
         prefs.edit().putString("freeze_mode", key).apply()
+    }
+
+    fun setAuditBackground(enabled: Boolean) {
+        _auditBackground.value = enabled
+        if (enabled) {
+            AuditController.start(context, persistPreference = true)
+        } else {
+            AuditController.stop(context, persistPreference = true)
+        }
+    }
+
+    fun setAuditDecoyWithBackground(enabled: Boolean) {
+        _auditDecoyWithBackground.value = enabled
+        AuditController.setDecoyWithBackground(context, enabled)
     }
 
     fun setHitActionMode(mode: String) {

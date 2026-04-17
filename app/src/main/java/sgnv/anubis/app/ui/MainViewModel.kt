@@ -85,6 +85,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val backgroundMonitoring: StateFlow<Boolean> = settingsController.backgroundMonitoring
     val freezeMode: StateFlow<FreezeMode> = settingsController.freezeMode
     val hitActionMode: StateFlow<String> = settingsController.hitActionMode
+    val auditBackground: StateFlow<Boolean> = settingsController.auditBackground
+    val auditDecoyWithBackground: StateFlow<Boolean> = settingsController.auditDecoyWithBackground
 
     private val _networkInfo = MutableStateFlow<NetworkInfo?>(null)
     val networkInfo: StateFlow<NetworkInfo?> = _networkInfo
@@ -301,6 +303,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setHitActionMode(mode: String) = settingsController.setHitActionMode(mode)
     fun setFreezeMode(mode: FreezeMode) = settingsController.setFreezeMode(mode)
     fun setBackgroundMonitoring(enabled: Boolean) = settingsController.setBackgroundMonitoring(enabled)
+    fun setAuditBackground(enabled: Boolean) = settingsController.setAuditBackground(enabled)
+    fun setAuditDecoyWithBackground(enabled: Boolean) = settingsController.setAuditDecoyWithBackground(enabled)
 
     fun dismissDangerousAppWarning() {
         _dangerousAppWarning.value = null

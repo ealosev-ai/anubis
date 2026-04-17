@@ -80,6 +80,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
+            <!-- После self-update (sideload / FileProvider install) нужно перезапустить
+                 фоновый аудит, если он был включён. ACTION_MY_PACKAGE_REPLACED шлётся
+                 Android системой только в ЭТО же приложение — не требует exported. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
         </receiver>
 
         <!-- Обрабатывает Freeze/Unfreeze/Dismiss actions из hit-нотификаций. -->

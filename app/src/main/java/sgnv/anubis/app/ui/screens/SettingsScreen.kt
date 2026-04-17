@@ -300,6 +300,75 @@ fun SettingsScreen(
             }
         }
 
+        Spacer(Modifier.height(12.dp))
+
+        // Фоновый аудит — держит honeypot-listener + (опционально) decoy-VPN
+        // активными когда Anubis свёрнут. Для 24ч-мониторинга сканирующих банков.
+        val auditBg by viewModel.auditBackground.collectAsState()
+        val auditDecoy by viewModel.auditDecoyWithBackground.collectAsState()
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Фоновый аудит ловушек", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Держит honeypot активным в фоне. Анубис автоматически " +
+                                "перезапустит ловушки после ребута. Показ в шторке: " +
+                                "«хитов за сегодня: N».",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = auditBg,
+                        onCheckedChange = { viewModel.setAuditBackground(it) },
+                        modifier = Modifier.semantics {
+                            stateDescription = if (auditBg) "включено" else "выключено"
+                        },
+                    )
+                }
+                if (auditBg) {
+                    androidx.compose.material3.HorizontalDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "С приманкой (decoy-VPN)",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                "Поднимает soft-tun0 без блокировки — детекторы видят " +
+                                    "VPN и идут сканить localhost. Жрёт ~5% батареи в сутки.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = auditDecoy,
+                            onCheckedChange = { viewModel.setAuditDecoyWithBackground(it) },
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                    Text(
+                        "На Honor/MagicOS: Настройки → Приложения → Anubis → Батарея → " +
+                            "«Управление вручную» → все тумблеры ON. Иначе MagicOS " +
+                            "убивает сервис ночью и аудит прерывается.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(24.dp))
 
         // Shizuku status
