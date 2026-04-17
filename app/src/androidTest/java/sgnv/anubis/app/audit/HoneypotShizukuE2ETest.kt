@@ -68,9 +68,11 @@ class HoneypotShizukuE2ETest {
 
     @After
     fun tearDown() {
-        // Listener живёт на уровне Application — стопаем только его работу,
-        // но не shutdown scope, чтобы следующий тест мог стартовать ещё раз.
-        listener.stop()
+        // setUp мог assumeTrue-пропустить тест до того как listener установился —
+        // в этом случае lateinit бросит UninitializedPropertyAccessException, и
+        // JUnit выдаст TestCouldNotBeSkippedException вместо skip. Проверяем
+        // через ::listener.isInitialized перед вызовом.
+        if (::listener.isInitialized) listener.stop()
     }
 
     @Test

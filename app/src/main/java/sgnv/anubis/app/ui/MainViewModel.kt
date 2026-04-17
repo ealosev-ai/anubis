@@ -16,7 +16,6 @@ import sgnv.anubis.app.service.StealthVpnService
 import sgnv.anubis.app.service.VpnMonitorService
 import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuStatus
-import sgnv.anubis.app.update.UpdateChecker
 import sgnv.anubis.app.update.UpdateInfo
 import sgnv.anubis.app.vpn.SelectedVpnClient
 import sgnv.anubis.app.vpn.VpnClientType
@@ -56,24 +55,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getVpnPermissionIntent(): Intent? = StealthVpnService.prepareVpn(getApplication())
 
-    private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
-    val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps
+    /**
+     * Список установленных приложений + раскладка по группам вынесены
+     * в AppListController — MainViewModel просто проксирует флоу и методы.
+     */
+    private val appListController = AppListController(
+        context = application,
+        repository = repository,
+        shizuku = shizukuManager,
+        scope = viewModelScope,
+    )
+    val installedApps: StateFlow<List<InstalledAppInfo>> = appListController.installedApps
+    val localApps: StateFlow<List<ManagedApp>> = appListController.localApps
+    val vpnOnlyApps: StateFlow<List<ManagedApp>> = appListController.vpnOnlyApps
+    val launchVpnApps: StateFlow<List<ManagedApp>> = appListController.launchVpnApps
 
-    // Home screen groups
-    private val _localApps = MutableStateFlow<List<ManagedApp>>(emptyList())
-    val localApps: StateFlow<List<ManagedApp>> = _localApps
-
-    private val _vpnOnlyApps = MutableStateFlow<List<ManagedApp>>(emptyList())
-    val vpnOnlyApps: StateFlow<List<ManagedApp>> = _vpnOnlyApps
-
-    private val _launchVpnApps = MutableStateFlow<List<ManagedApp>>(emptyList())
-    val launchVpnApps: StateFlow<List<ManagedApp>> = _launchVpnApps
-
-    private val _selectedVpnClient = MutableStateFlow(SelectedVpnClient.fromKnown(VpnClientType.V2RAY_NG))
-    val selectedVpnClient: StateFlow<SelectedVpnClient> = _selectedVpnClient
-
-    private val _installedVpnClients = MutableStateFlow<List<VpnClientType>>(emptyList())
-    val installedVpnClients: StateFlow<List<VpnClientType>> = _installedVpnClients
+    /**
+     * Выбор VPN-клиента, режим заморозки, настройки monitoring/hit-action
+     * живут в SettingsController. MainViewModel только прокидывает StateFlow.
+     */
+    private val settingsController = SettingsController(
+        context = application,
+        shizuku = shizukuManager,
+        vpnClientManager = vpnClientManager,
+        scope = viewModelScope,
+    )
+    val selectedVpnClient: StateFlow<SelectedVpnClient> = settingsController.selectedVpnClient
+    val installedVpnClients: StateFlow<List<VpnClientType>> = settingsController.installedVpnClients
+    val backgroundMonitoring: StateFlow<Boolean> = settingsController.backgroundMonitoring
+    val freezeMode: StateFlow<FreezeMode> = settingsController.freezeMode
+    val hitActionMode: StateFlow<String> = settingsController.hitActionMode
 
     private val _networkInfo = MutableStateFlow<NetworkInfo?>(null)
     val networkInfo: StateFlow<NetworkInfo?> = _networkInfo
@@ -81,45 +92,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _networkLoading = MutableStateFlow(false)
     val networkLoading: StateFlow<Boolean> = _networkLoading
 
-    private val _backgroundMonitoring = MutableStateFlow(false)
-    val backgroundMonitoring: StateFlow<Boolean> = _backgroundMonitoring
-
-    private val _freezeMode = MutableStateFlow(shizukuManager.freezeMode)
-    val freezeMode: StateFlow<FreezeMode> = _freezeMode
-
-    private val _hitActionMode = MutableStateFlow(loadHitActionMode())
-    val hitActionMode: StateFlow<String> = _hitActionMode
-
-    private val _updateSource = MutableStateFlow(UpdateChecker.getSource(application))
-    val updateSource: StateFlow<String> = _updateSource
+    /** Всё связанное с self-update вынесено в UpdateController. */
+    private val updateController = UpdateController(application, viewModelScope)
+    val updateInfo: StateFlow<UpdateInfo?> = updateController.updateInfo
+    val updateCheckEnabled: StateFlow<Boolean> = updateController.updateCheckEnabled
+    val updateCheckInProgress: StateFlow<Boolean> = updateController.updateCheckInProgress
+    val updateSource: StateFlow<String> = updateController.updateSource
 
     private val _dangerousAppWarning = MutableStateFlow<String?>(null)
     val dangerousAppWarning: StateFlow<String?> = _dangerousAppWarning
-
-    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
-    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo
-
-    private val _updateCheckEnabled = MutableStateFlow(true)
-    val updateCheckEnabled: StateFlow<Boolean> = _updateCheckEnabled
-
-    private val _updateCheckInProgress = MutableStateFlow(false)
-    val updateCheckInProgress: StateFlow<Boolean> = _updateCheckInProgress
 
     private val _resetCompleted = MutableSharedFlow<Int>()
     val resetCompleted: SharedFlow<Int> = _resetCompleted
 
     init {
         // Мониторинг VPN стартует в AnubisApp.onCreate — здесь не дублируем.
-        refreshVpnClients()
-        loadSelectedClient()
+        // refreshVpnClients/loadSelectedClient/loadBackgroundMonitoring — теперь в SettingsController.init.
         loadInstalledApps()
         loadGroupedApps()
         scheduleAutoFreeze()
         observeVpnState()
-        loadBackgroundMonitoring()
         checkDangerousApps()
-        loadUpdateCheckPref()
-        autoCheckForUpdates()
+        updateController.scheduleAutoCheck()
     }
 
     /** Watch VPN state changes — auto-freeze, sync state, refresh network */
@@ -155,7 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleStealth() {
         viewModelScope.launch {
             if (stealthState.value == StealthState.DISABLED) {
-                orchestrator.enable(_selectedVpnClient.value)
+                orchestrator.enable(settingsController.selectedVpnClient.value)
                 if (orchestrator.state.value == StealthState.ENABLED) {
                     VpnMonitorService.start(getApplication())
                 }
@@ -164,7 +158,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val detectedClient = vpnClientManager.activeVpnClient.value
                 val clientToStop = if (detectedClient != null) SelectedVpnClient.fromKnown(detectedClient)
                     else vpnClientManager.activeVpnPackage.value?.let { SelectedVpnClient.fromPackage(it) }
-                    ?: _selectedVpnClient.value
+                    ?: settingsController.selectedVpnClient.value
                 orchestrator.disable(clientToStop, detectedPkg)
                 if (orchestrator.state.value == StealthState.DISABLED) {
                     VpnMonitorService.stop(getApplication())
@@ -175,7 +169,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun launchWithVpn(packageName: String) {
         viewModelScope.launch {
-            orchestrator.launchWithVpn(packageName, _selectedVpnClient.value)
+            orchestrator.launchWithVpn(packageName, settingsController.selectedVpnClient.value)
             if (orchestrator.state.value == StealthState.ENABLED) {
                 VpnMonitorService.start(getApplication())
             }
@@ -188,7 +182,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val detectedClient = vpnClientManager.activeVpnClient.value
             val clientToStop = if (detectedClient != null) SelectedVpnClient.fromKnown(detectedClient)
                 else detectedPkg?.let { SelectedVpnClient.fromPackage(it) }
-                ?: _selectedVpnClient.value
+                ?: settingsController.selectedVpnClient.value
             orchestrator.launchLocal(packageName, clientToStop, detectedPkg)
             if (orchestrator.state.value == StealthState.DISABLED) {
                 VpnMonitorService.stop(getApplication())
@@ -203,76 +197,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun isAppFrozen(packageName: String): Boolean = shizukuManager.isAppFrozen(packageName)
-
-    fun removeFromGroup(packageName: String) {
-        viewModelScope.launch {
-            repository.removeApp(packageName)
-            loadInstalledApps()
-            loadGroupedApps()
-        }
-    }
-
-    fun createShortcut(packageName: String) {
-        viewModelScope.launch {
-            val app = getApplication<Application>()
-            val pm = app.packageManager
-            val sm = app.getSystemService(ShortcutManager::class.java) ?: return@launch
-
-            if (!sm.isRequestPinShortcutSupported) return@launch
-
-            val group = repository.getAppGroup(packageName)
-            val label = try {
-                pm.getApplicationInfo(packageName, 0).loadLabel(pm).toString()
-            } catch (e: Exception) { packageName }
-
-            val icon = try {
-                val drawable = pm.getApplicationIcon(packageName)
-                val bmp = Bitmap.createBitmap(
-                    drawable.intrinsicWidth.coerceAtLeast(1),
-                    drawable.intrinsicHeight.coerceAtLeast(1),
-                    Bitmap.Config.ARGB_8888
-                )
-                val canvas = Canvas(bmp)
-                drawable.setBounds(0, 0, canvas.width, canvas.height)
-                drawable.draw(canvas)
-                Icon.createWithBitmap(bmp)
-            } catch (e: Exception) {
-                Icon.createWithResource(app, android.R.drawable.sym_def_app_icon)
-            }
-
-            val intent = Intent(app, sgnv.anubis.app.service.ShortcutActivity::class.java).apply {
-                action = Intent.ACTION_VIEW
-                putExtra("package", packageName)
-                putExtra("group", group?.name ?: AppGroup.LAUNCH_VPN.name)
-            }
-
-            val shortcutInfo = ShortcutInfo.Builder(app, "stealth_$packageName")
-                .setShortLabel(label)
-                .setLongLabel("$label (Stealth)")
-                .setIcon(icon)
-                .setIntent(intent)
-                .build()
-
-            sm.requestPinShortcut(shortcutInfo, null)
-        }
-    }
-
-    fun cycleAppGroup(packageName: String) {
-        viewModelScope.launch {
-            repository.cycleGroup(packageName)
-            loadInstalledApps()
-            loadGroupedApps()
-        }
-    }
-
-    fun autoSelectRestricted() {
-        viewModelScope.launch {
-            repository.autoSelectRestricted()
-            loadInstalledApps()
-            loadGroupedApps()
-        }
-    }
+    fun isAppFrozen(packageName: String): Boolean = appListController.isAppFrozen(packageName)
+    fun removeFromGroup(packageName: String) = appListController.removeFromGroup(packageName)
+    fun createShortcut(packageName: String) = appListController.createShortcut(packageName)
+    fun cycleAppGroup(packageName: String) = appListController.cycleAppGroup(packageName)
+    fun autoSelectRestricted() = appListController.autoSelectRestricted()
 
     fun unfreezeAllAndClear() {
         viewModelScope.launch {
@@ -318,34 +247,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadInstalledApps() {
-        viewModelScope.launch {
-            _installedApps.value = repository.getInstalledApps()
-        }
-    }
+    fun loadInstalledApps() = appListController.loadInstalledApps()
+    fun loadGroupedApps() = appListController.loadGroupedApps()
 
-    fun loadGroupedApps() {
-        viewModelScope.launch {
-            _localApps.value = repository.getAppsByGroup(AppGroup.LOCAL)
-            _vpnOnlyApps.value = repository.getAppsByGroup(AppGroup.VPN_ONLY)
-            _launchVpnApps.value = repository.getAppsByGroup(AppGroup.LAUNCH_VPN)
-        }
-    }
-
-    fun selectVpnClient(client: SelectedVpnClient) {
-        _selectedVpnClient.value = client
-        getApplication<Application>()
-            .getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .edit()
-            .putString("vpn_client_package", client.packageName)
-            .apply()
-    }
-
-    fun isVpnClientEnabled(packageName: String): Boolean {
-        return try {
-            getApplication<Application>().packageManager.getApplicationInfo(packageName, 0).enabled
-        } catch (e: Exception) { false }
-    }
+    fun selectVpnClient(client: SelectedVpnClient) = settingsController.selectVpnClient(client)
+    fun isVpnClientEnabled(packageName: String): Boolean = settingsController.isVpnClientEnabled(packageName)
 
     suspend fun exportGroupsJson(): String = GroupsBackup.export(repository)
 
@@ -364,62 +270,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return n
     }
 
-    fun setUpdateSource(source: String) {
-        UpdateChecker.setSource(getApplication(), source)
-        _updateSource.value = UpdateChecker.getSource(getApplication())
-    }
+    fun setUpdateSource(source: String) = updateController.setSource(source)
 
-    fun setHitActionMode(mode: String) {
-        val normalized = if (mode in setOf("off", "ask", "auto")) mode else "off"
-        _hitActionMode.value = normalized
-        getApplication<Application>()
-            .getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .edit().putString("hit_action_mode", normalized).apply()
-    }
-
-    private fun loadHitActionMode(): String {
-        return getApplication<Application>()
-            .getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .getString("hit_action_mode", "off") ?: "off"
-    }
-
-    fun setFreezeMode(mode: FreezeMode) {
-        shizukuManager.freezeMode = mode
-        _freezeMode.value = mode
-        getApplication<Application>()
-            .getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .edit()
-            .putString(
-                "freeze_mode",
-                when (mode) {
-                    FreezeMode.SUSPEND -> "suspend"
-                    FreezeMode.DISABLE_USER -> "disable"
-                },
-            )
-            .apply()
-    }
-
-    fun setBackgroundMonitoring(enabled: Boolean) {
-        _backgroundMonitoring.value = enabled
-        val app = getApplication<Application>()
-        app.getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .edit().putBoolean("background_monitoring", enabled).apply()
-        if (enabled) {
-            VpnMonitorService.start(app)
-        } else {
-            VpnMonitorService.stop(app)
-        }
-    }
-
-    private fun loadBackgroundMonitoring() {
-        val prefs = getApplication<Application>()
-            .getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean("background_monitoring", false)
-        _backgroundMonitoring.value = enabled
-        if (enabled) {
-            VpnMonitorService.start(getApplication())
-        }
-    }
+    fun setHitActionMode(mode: String) = settingsController.setHitActionMode(mode)
+    fun setFreezeMode(mode: FreezeMode) = settingsController.setFreezeMode(mode)
+    fun setBackgroundMonitoring(enabled: Boolean) = settingsController.setBackgroundMonitoring(enabled)
 
     fun dismissDangerousAppWarning() {
         _dangerousAppWarning.value = null
@@ -524,62 +379,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun refreshVpnClients() {
-        _installedVpnClients.value = vpnClientManager.getInstalledClients()
-    }
+    private fun refreshVpnClients() = settingsController.refreshVpnClients()
 
-    private fun loadSelectedClient() {
-        val prefs = getApplication<Application>()
-            .getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val pkg = prefs.getString("vpn_client_package", null)
-            ?: prefs.getString("vpn_client", null)?.let {
-                // Migration from old format (enum name → package name)
-                try { VpnClientType.valueOf(it).packageName } catch (e: Exception) { null }
-            }
-        _selectedVpnClient.value = if (pkg != null) {
-            SelectedVpnClient.fromPackage(pkg)
-        } else {
-            SelectedVpnClient.fromKnown(VpnClientType.V2RAY_NG)
-        }
-    }
-
-    private fun loadUpdateCheckPref() {
-        _updateCheckEnabled.value = UpdateChecker.isEnabled(getApplication())
-    }
-
-    fun setUpdateCheckEnabled(enabled: Boolean) {
-        _updateCheckEnabled.value = enabled
-        UpdateChecker.setEnabled(getApplication(), enabled)
-    }
-
-    private fun autoCheckForUpdates() {
-        if (!UpdateChecker.isEnabled(getApplication())) return
-        viewModelScope.launch {
-            delay(5000)
-            val info = UpdateChecker.check(getApplication(), force = false) ?: return@launch
-            if (UpdateChecker.shouldNotify(getApplication(), info)) {
-                _updateInfo.value = info
-            }
-        }
-    }
-
-    fun checkForUpdatesNow() {
-        viewModelScope.launch {
-            _updateCheckInProgress.value = true
-            val info = UpdateChecker.check(getApplication(), force = true)
-            _updateCheckInProgress.value = false
-            _updateInfo.value = info
-        }
-    }
-
-    fun dismissUpdateDialog() { _updateInfo.value = null }
-
-    fun skipCurrentUpdate() {
-        _updateInfo.value?.let {
-            UpdateChecker.skipVersion(getApplication(), it.latestVersion)
-        }
-        _updateInfo.value = null
-    }
+    fun setUpdateCheckEnabled(enabled: Boolean) = updateController.setEnabled(enabled)
+    fun checkForUpdatesNow() = updateController.checkNow()
+    fun dismissUpdateDialog() = updateController.dismiss()
+    fun skipCurrentUpdate() = updateController.skipCurrent()
 
     override fun onCleared() {
         // Мониторинг VPN живёт на Application-уровне — ViewModel больше его не дергает.
