@@ -6,6 +6,7 @@
 .externalNativeBuild
 .cxx
 /app/build
+/core-shizuku/build
 
 # IDE
 /.idea

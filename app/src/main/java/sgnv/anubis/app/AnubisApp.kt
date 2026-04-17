@@ -67,8 +67,10 @@ class AnubisApp : Application() {
         super.onCreate()
         createNotificationChannel()
 
-        // Init Shizuku once — all components share this instance
-        shizukuManager = ShizukuManager(packageManager)
+        // Init Shizuku once — all components share this instance.
+        // applicationId передаём явно: ShizukuManager живёт в :core-shizuku и
+        // больше не может брать его из BuildConfig хост-приложения.
+        shizukuManager = ShizukuManager(packageManager, BuildConfig.APPLICATION_ID)
         // Читаем режим заморозки из prefs: по-умолчанию disable-user (legacy),
         // но пользователь может переключить на suspend чтоб не ломать иконки
         // в папках лаунчера (Honor MagicOS шлёт PACKAGE_REMOVED из disable).

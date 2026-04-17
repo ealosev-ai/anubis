@@ -69,7 +69,7 @@ android {
 
     buildFeatures {
         compose = true
-        aidl = true
+        // aidl больше не нужен здесь — IUserService.aidl переехал в :core-shizuku.
         buildConfig = true
     }
 
@@ -103,9 +103,9 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.2")
     ksp("androidx.room:room-compiler:2.7.2")
 
-    // Shizuku
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
+    // Shizuku и UserService живут в отдельном library-модуле — API 'api' там,
+    // так что ShellExec/ShizukuManager/Shizuku.* доступны через transitive.
+    implementation(project(":core-shizuku"))
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

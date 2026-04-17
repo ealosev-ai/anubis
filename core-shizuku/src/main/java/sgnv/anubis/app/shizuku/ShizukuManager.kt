@@ -4,7 +4,6 @@ import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
-import sgnv.anubis.app.BuildConfig
 import sgnv.anubis.app.IUserService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -27,7 +26,16 @@ enum class FreezeMode {
     SUSPEND,
 }
 
-class ShizukuManager(private val packageManager: PackageManager) : ShellExec {
+class ShizukuManager(
+    private val packageManager: PackageManager,
+    /**
+     * `applicationId` основного APK. Нужен для `Shizuku.UserServiceArgs`,
+     * который требует `ComponentName(packageName, UserService)` — а packageName
+     * зависит от сборки (debug-suffix .debug). Раньше брали BuildConfig.APPLICATION_ID,
+     * но после выделения в library module BuildConfig хоста здесь недоступен.
+     */
+    private val hostPackageName: String,
+) : ShellExec {
 
     override suspend fun runShell(vararg args: String): String? = runCommandWithOutput(*args)
 
@@ -125,9 +133,10 @@ class ShizukuManager(private val packageManager: PackageManager) : ShellExec {
 
     private val serviceArgs = Shizuku.UserServiceArgs(
         ComponentName(
-            // Берём applicationId из BuildConfig, а не хардкод — чтобы debug-сборка
-            // с applicationIdSuffix (".debug") тоже могла забиндить свой UserService через Shizuku.
-            BuildConfig.APPLICATION_ID,
+            // hostPackageName приходит снаружи (AnubisApp.onCreate) из BuildConfig.APPLICATION_ID
+            // приложения. Debug-сборка с applicationIdSuffix=".debug" тоже заведётся,
+            // т.к. каждый APK передаёт свой applicationId.
+            hostPackageName,
             UserService::class.java.name
         )
     )
