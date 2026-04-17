@@ -428,7 +428,10 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                 )
-                Row(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(4.dp))
+                // Radio в Column (не Row) — на узких Honor-экранах 3 варианта в
+                // Row налезали друг на друга / обрезали текст.
+                Column {
                     listOf(
                         "fork" to "Мой форк",
                         "upstream" to "Upstream",
@@ -436,15 +439,16 @@ fun SettingsScreen(
                     ).forEach { (key, label) ->
                         Row(
                             modifier = Modifier
+                                .fillMaxWidth()
                                 .clickable { viewModel.setUpdateSource(key) }
-                                .padding(end = 12.dp, top = 4.dp, bottom = 4.dp),
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(
                                 selected = updateSource == key,
                                 onClick = { viewModel.setUpdateSource(key) },
                             )
-                            Text(label, style = MaterialTheme.typography.bodySmall)
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
