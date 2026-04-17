@@ -87,8 +87,12 @@ class AuditForegroundService : Service() {
     private fun startNotificationUpdates() {
         updateJob?.cancel()
         val app = applicationContext as AnubisApp
+        val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
         updateJob = scope.launch {
             while (true) {
+                // Watchdog heartbeat — AnubisApp.onCreate увидит этот timestamp
+                // и поймёт жив ли был сервис недавно. Gap > 1ч = был убит.
+                prefs.edit().putLong(PREF_LAST_ALIVE_MS, System.currentTimeMillis()).apply()
                 val since = startOfTodayMs()
                 val count = try {
                     app.auditRepository.countSinceFlow(since).let { flow ->
@@ -160,6 +164,8 @@ class AuditForegroundService : Service() {
         const val ACTION_STOP = "sgnv.anubis.app.STOP_AUDIT_FGS"
         const val EXTRA_WITH_DECOY = "with_decoy"
         const val NOTIFICATION_ID = 3
+        /** Watchdog heartbeat — timestamp последнего tick'а сервиса. */
+        const val PREF_LAST_ALIVE_MS = "audit_service_last_alive_ms"
 
         private val _running = MutableStateFlow(false)
         /** true пока живёт AuditForegroundService. Для HomeScreen-карточки. */

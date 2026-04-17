@@ -31,9 +31,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import sgnv.anubis.app.service.AuditForegroundService
+import java.util.Calendar
 import org.json.JSONObject
 import java.net.URL
 
@@ -87,6 +93,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val hitActionMode: StateFlow<String> = settingsController.hitActionMode
     val auditBackground: StateFlow<Boolean> = settingsController.auditBackground
     val auditDecoyWithBackground: StateFlow<Boolean> = settingsController.auditDecoyWithBackground
+
+    /** Жив ли AuditForegroundService (для Home-карточки «Аудит активен»). */
+    val auditServiceRunning: StateFlow<Boolean> = AuditForegroundService.running
+
+    /**
+     * Хитов с начала текущих суток. Пересчитывается, когда меняется startOfDay
+     * (раз в сутки — не часто) или когда в Room прилетает новый хит
+     * (dao.countSinceFlow реактивный).
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val auditHitsToday: StateFlow<Int> = flow {
+        while (true) {
+            emit(startOfTodayMs())
+            delay(60_000L)
+        }
+    }
+        .flatMapLatest { since -> app.auditRepository.countSinceFlow(since) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    private fun startOfTodayMs(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
 
     private val _networkInfo = MutableStateFlow<NetworkInfo?>(null)
     val networkInfo: StateFlow<NetworkInfo?> = _networkInfo

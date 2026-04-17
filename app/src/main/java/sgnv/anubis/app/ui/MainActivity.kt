@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
                                 vpnPermissionLauncher.launch(intent)
                             },
                             onOpenRecovery = { showRecovery = true },
+                            onOpenAudit = { showAudit = true },
                             modifier = Modifier.padding(padding)
                         )
                         1 -> AppListScreen(viewModel, Modifier.padding(padding))

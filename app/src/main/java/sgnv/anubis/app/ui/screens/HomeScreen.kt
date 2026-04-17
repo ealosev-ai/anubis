@@ -98,6 +98,7 @@ fun HomeScreen(
     viewModel: MainViewModel,
     onRequestVpnPermission: (Intent) -> Unit = {},
     onOpenRecovery: () -> Unit = {},
+    onOpenAudit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val stealthState by viewModel.stealthState.collectAsState()
@@ -285,6 +286,50 @@ fun HomeScreen(
                     ) {
                         Text(if (isEnabled) "Свернуть" else "Развернуть")
                     }
+                }
+            }
+        }
+
+        // Аудит ловушек — карточка статуса. Показывается только когда сервис
+        // жив (фоновый аудит включён) или когда за сегодня уже были хиты
+        // (пользователь вернулся в Home и видит что за день кто-то шлёпнул).
+        val auditRunning by viewModel.auditServiceRunning.collectAsState()
+        val auditHitsToday by viewModel.auditHitsToday.collectAsState()
+        if (auditRunning || auditHitsToday > 0) {
+            Spacer(Modifier.height(8.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onOpenAudit() },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (auditHitsToday > 0)
+                        MaterialTheme.colorScheme.errorContainer
+                    else
+                        MaterialTheme.colorScheme.primaryContainer,
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (auditRunning) "Аудит ловушек активен" else "Аудит ловушек",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            when {
+                                auditHitsToday == 0 && auditRunning -> "За сегодня тишина — никто не сканил"
+                                auditHitsToday > 0 -> "За сегодня хитов: $auditHitsToday · тап → подробности"
+                                else -> "За сегодня хитов: $auditHitsToday"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Text(
+                        "›",
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
                 }
             }
         }

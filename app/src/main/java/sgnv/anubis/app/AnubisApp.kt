@@ -91,6 +91,51 @@ open class AnubisApp : Application() {
         shizukuManager.startListening()
 
         startRuntimeMonitoring()
+        checkAuditWatchdog(prefs)
+    }
+
+    /**
+     * Если пользователь включал «Фоновый аудит» и последний heartbeat сервиса
+     * был больше часа назад — значит Honor/MagicOS убил сервис, а app только
+     * теперь восстал. Показываем reminder-нотификацию (поверх обычной системной)
+     * чтобы пользователь понял что 24-часовой аудит прерван.
+     */
+    private fun checkAuditWatchdog(prefs: android.content.SharedPreferences) {
+        val bgEnabled = prefs.getBoolean(
+            sgnv.anubis.app.service.AuditController.PREF_BG_ENABLED, false,
+        )
+        if (!bgEnabled) return
+        val lastAlive = prefs.getLong(
+            sgnv.anubis.app.service.AuditForegroundService.PREF_LAST_ALIVE_MS, 0L,
+        )
+        if (lastAlive == 0L) return  // ни разу не стартовал — ещё рано ругаться
+        val gapMs = System.currentTimeMillis() - lastAlive
+        // > 60 минут без heartbeat — сервис был убит в фоне.
+        if (gapMs > 60 * 60_000L) {
+            showAuditKilledReminder(gapMs)
+        }
+    }
+
+    private fun showAuditKilledReminder(gapMs: Long) {
+        val hours = gapMs / 3_600_000L
+        val openIntent = android.app.PendingIntent.getActivity(
+            this, 42,
+            android.content.Intent(this, sgnv.anubis.app.ui.MainActivity::class.java),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notif = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Аудит ловушек был прерван")
+            .setContentText(
+                "Сервис простаивал $hours ч — Honor battery saver убил его. " +
+                    "Проверьте «Запуск приложений → Anubis»."
+            )
+            .setSmallIcon(R.drawable.ic_shield)
+            .setContentIntent(openIntent)
+            .setAutoCancel(true)
+            .build()
+        try {
+            androidx.core.app.NotificationManagerCompat.from(this).notify(99, notif)
+        } catch (_: SecurityException) { /* нет POST_NOTIFICATIONS — игнор */ }
     }
 
     /**
