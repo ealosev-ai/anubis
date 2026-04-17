@@ -17,7 +17,9 @@ android {
         targetSdk = 34
         versionCode = 2
         versionName = "0.1.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
 
     signingConfigs {
         create("release") {
@@ -111,4 +113,13 @@ dependencies {
     // Тесты (jvm/unit) — Android-framework не тянем, только чистая логика.
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+
+    // Instrumentation-тесты: бегут на реальном устройстве/эмуляторе.
+    // Room-testing даёт MigrationTestHelper для проверки миграций против
+    // экспортированных JSON-схем.
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:rules:1.5.0")
+    androidTestImplementation("androidx.room:room-testing:2.7.2")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }

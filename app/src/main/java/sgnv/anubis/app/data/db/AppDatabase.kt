@@ -20,6 +20,43 @@ class AppGroupConverter {
     fun toAppGroup(name: String): AppGroup = AppGroup.valueOf(name)
 }
 
+/**
+ * Миграции вынесены top-level (а не в companion), чтобы androidTest мог их
+ * гонять напрямую через AppDatabaseMigrationTest без reflection-штучек.
+ */
+internal val MIGRATION_3_4_EXPOSED = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `audit_hits` (
+                `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                `timestampMs` INTEGER NOT NULL,
+                `port` INTEGER NOT NULL,
+                `uid` INTEGER,
+                `packageName` TEXT,
+                `handshakePreview` TEXT
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+/** v4 → v5: добавили SNI hostname из TLS ClientHello. */
+internal val MIGRATION_4_5_EXPOSED = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `audit_hits` ADD COLUMN `sni` TEXT")
+    }
+}
+
+/** v5 → v6: добавили протокол TCP/UDP (default TCP для старых записей). */
+internal val MIGRATION_5_6_EXPOSED = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `audit_hits` ADD COLUMN `protocol` TEXT NOT NULL DEFAULT 'TCP'"
+        )
+    }
+}
+
 @Database(
     entities = [ManagedApp::class, AuditHitEntity::class],
     version = 6,
@@ -35,43 +72,6 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        /**
-         * v3 → v4: добавили таблицу audit_hits для персиста honeypot-журнала.
-         * Раньше hits жили только в RAM — при убийстве процесса улики терялись.
-         */
-        private val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `audit_hits` (
-                        `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                        `timestampMs` INTEGER NOT NULL,
-                        `port` INTEGER NOT NULL,
-                        `uid` INTEGER,
-                        `packageName` TEXT,
-                        `handshakePreview` TEXT
-                    )
-                    """.trimIndent()
-                )
-            }
-        }
-
-        /** v4 → v5: добавили SNI hostname из TLS ClientHello. */
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `audit_hits` ADD COLUMN `sni` TEXT")
-            }
-        }
-
-        /** v5 → v6: добавили протокол TCP/UDP (default TCP для старых записей). */
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE `audit_hits` ADD COLUMN `protocol` TEXT NOT NULL DEFAULT 'TCP'"
-                )
-            }
-        }
-
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -79,7 +79,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "vpn_stealth.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_3_4_EXPOSED, MIGRATION_4_5_EXPOSED, MIGRATION_5_6_EXPOSED)
                     // v1/v2 — исторические, схемы не известны. Fallback оставляем
                     // как safety net именно для них; для v3+ работают явные Migration.
                     .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1, 2)
