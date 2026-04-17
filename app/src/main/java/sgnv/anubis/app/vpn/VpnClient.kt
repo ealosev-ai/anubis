@@ -8,7 +8,8 @@ enum class VpnClientType(
     NEKO_BOX("NekoBox", "moe.nb4a"),
     HAPP("Happ", "com.happproxy"),
     V2RAY_TUN("v2rayTun", "com.v2raytun.android"),
-    V2BOX("V2Box", "dev.hexasoftware.v2box");
+    V2BOX("V2Box", "dev.hexasoftware.v2box"),
+    AMNEZIA("AmneziaVPN", "org.amnezia.vpn");
 
     companion object {
         fun fromPackageName(pkg: String): VpnClientType? =
@@ -120,6 +121,15 @@ object VpnClientControls {
                 "-a", "dev.hexasoftware.v2box.action.widget.click",
                 "-n", "dev.hexasoftware.v2box/.receiver.WidgetProvider"
             ),
+        ),
+
+        // AmneziaVPN: без публичного toggle-API — клиент на Qt, exported-receivers
+        // нет, запуск/остановка только через UI или system VPN-dialog. Держим MANUAL:
+        // приложение просто открывается, пользователь жмёт «Подключить» сам.
+        // При stealth.disable() останавливаем через dummy-VPN takeover + force-stop.
+        VpnClientType.AMNEZIA to VpnClientControl(
+            clientType = VpnClientType.AMNEZIA,
+            mode = VpnControlMode.MANUAL,
         ),
 
     )

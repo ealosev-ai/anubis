@@ -10,9 +10,15 @@ import android.util.Log
 import sgnv.anubis.app.shizuku.ShizukuManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class VpnClientManager(
     private val context: Context,
@@ -30,6 +36,14 @@ class VpnClientManager(
     val activeVpnPackage: StateFlow<String?> = _activeVpnPackage
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    // Собственный scope — fire-and-forget detect раньше сыпался в GlobalScope-подобный
+    // CoroutineScope(Dispatchers.IO), не отменялся при stopMonitoringVpn() и мог
+    // записать stale данные уже после того как _vpnActive сброшен.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private var detectJob: Job? = null
+    private val detectMutex = Mutex()
 
     fun getInstalledClients(): List<VpnClientType> {
         return VpnClientType.entries.filter { isInstalled(it) }
@@ -133,15 +147,25 @@ class VpnClientManager(
         networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 _vpnActive.value = true
-                CoroutineScope(Dispatchers.IO).launch { detectActiveVpnClient() }
+                // Отменяем предыдущий detect, если он ещё бежит — новый VPN
+                // появился, старое значение уже неактуально.
+                scope.launch {
+                    detectJob?.cancelAndJoin()
+                    detectJob = scope.launch { detectActiveVpnClient() }
+                }
             }
 
             override fun onLost(network: Network) {
                 val stillActive = isVpnCurrentlyActive(cm)
                 _vpnActive.value = stillActive
                 if (!stillActive) {
-                    _activeVpnClient.value = null
-                    _activeVpnPackage.value = null
+                    // Гонка: detectJob мог уже прочитать pkg и стоять перед записью.
+                    // Отменяем его, чтобы не перезаписал null обратно на stale-значение.
+                    scope.launch {
+                        detectJob?.cancelAndJoin()
+                        _activeVpnClient.value = null
+                        _activeVpnPackage.value = null
+                    }
                 }
             }
         }
@@ -162,6 +186,14 @@ class VpnClientManager(
             }
             networkCallback = null
         }
+        detectJob?.cancel()
+        detectJob = null
+    }
+
+    /** Освободить все корутины (shutdown процесса). */
+    fun shutdown() {
+        stopMonitoringVpn()
+        scope.cancel()
     }
 
     fun refreshVpnState() {
@@ -173,18 +205,26 @@ class VpnClientManager(
      * Detect which VPN client is currently providing the active VPN connection.
      * Tries multiple strategies — first success wins.
      */
-    suspend fun detectActiveVpnClient(): VpnClientType? {
+    suspend fun detectActiveVpnClient(): VpnClientType? = detectMutex.withLock {
         if (!_vpnActive.value) {
             _activeVpnClient.value = null
             _activeVpnPackage.value = null
-            return null
+            return@withLock null
         }
 
         val pkg = getVpnOwnerPackage()
+
+        // Между началом резолва и сейчас VPN мог отвалиться — не пишем stale.
+        if (!_vpnActive.value) {
+            _activeVpnClient.value = null
+            _activeVpnPackage.value = null
+            return@withLock null
+        }
+
         _activeVpnPackage.value = pkg
         val client = if (pkg != null) VpnClientType.fromPackageName(pkg) else null
         _activeVpnClient.value = client
-        return client
+        client
     }
 
     /**
@@ -205,34 +245,57 @@ class VpnClientManager(
     }
 
     private suspend fun getVpnOwnerByDumpsys(): String? {
-        // Extract OwnerUid directly from the VPN network section.
-        // On A11 the VPN entry has "type: VPN[" in its NetworkAgentInfo.
-        // We grep for that (NOT "NOT_VPN"), then find OwnerUid nearby.
-        val uidStr = shizukuManager.runCommandWithOutput(
-            "sh", "-c",
-            "dumpsys connectivity 2>/dev/null | grep -A 30 'type: VPN\\[' | grep -oE 'OwnerUid: [0-9]+' | head -1 | grep -oE '[0-9]+'"
-        )
+        // Берём весь дамп в Kotlin и парсим регексами — sh-chain ломался на
+        // разных форматах Android (A11 'type: VPN[', A13+ 'Transports: VPN',
+        // A14+ иногда '[VPN]'). Единый парсер проще расширять.
+        val dump = shizukuManager.runCommandWithOutput("dumpsys", "connectivity")
+            ?.takeIf { !it.startsWith("ERROR:") }
+            ?: return null
 
-        var uid = uidStr?.trim()?.toIntOrNull()
+        val uid = extractVpnOwnerUid(dump) ?: return null
 
-        // Fallback: try "Transports: VPN" pattern (newer Android format)
-        if (uid == null || uid <= 0) {
-            val uidStr2 = shizukuManager.runCommandWithOutput(
-                "sh", "-c",
-                "dumpsys connectivity 2>/dev/null | grep -A 10 'Transports: VPN' | grep -oE 'OwnerUid: [0-9]+' | head -1 | grep -oE '[0-9]+'"
-            )
-            uid = uidStr2?.trim()?.toIntOrNull()
+        // pm list packages --uid <uid> может вернуть несколько пакетов shared-uid,
+        // нам нужен ЛЮБОЙ валидный. На старом API иногда одна строка, на новом
+        // Android 14 — вывод `package:a  package:b` через пробел.
+        val pkgOutput = shizukuManager.runCommandWithOutput("pm", "list", "packages", "--uid", uid.toString())
+            ?.takeIf { !it.startsWith("ERROR:") }
+            ?: return null
+
+        return pkgOutput.lineSequence()
+            .flatMap { it.split(Regex("\\s+")).asSequence() }
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("package:") && it.length > "package:".length }
+            ?.removePrefix("package:")
+    }
+
+    /**
+     * Разные Android версии печатают VPN-agent в dumpsys по-разному. Ищем
+     * OwnerUid/uid в блоке NetworkAgentInfo, у которого есть признак VPN:
+     *   - "type: VPN["          — до Android 12
+     *   - "Transports: VPN"     — Android 12+
+     *   - "[VPN]"               — иногда на Android 14/15
+     *
+     * Возвращаем первый найденный uid > 1000 (приложение, не системный демон).
+     */
+    internal fun extractVpnOwnerUid(dump: String): Int? {
+        val ownerUidRx = Regex("""OwnerUid[:=\s]+(\d+)""")
+        val vpnMarkerRx = Regex("""(?:type: VPN\[|Transports:[^\n]*\bVPN\b|\[VPN\])""")
+
+        // Разбиваем на абзацы по пустой строке — NetworkAgentInfo обычно занимает один блок.
+        for (block in dump.split("\n\n", "\n \n")) {
+            if (!vpnMarkerRx.containsMatchIn(block)) continue
+            val uid = ownerUidRx.find(block)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+            if (uid > 1000) return uid
         }
 
-        if (uid != null && uid > 0) {
-            val pkgOutput = shizukuManager.runCommandWithOutput(
-                "sh", "-c",
-                "pm list packages --uid $uid 2>/dev/null | head -1"
-            )?.trim()
-            val pkg = pkgOutput?.removePrefix("package:")?.split("\\s+".toRegex())?.firstOrNull()?.trim()
-            if (!pkg.isNullOrBlank()) return pkg
+        // Fallback: скользящее окно в 30 строк после маркера (на случай если блоки слеплены).
+        val lines = dump.lineSequence().toList()
+        for (i in lines.indices) {
+            if (!vpnMarkerRx.containsMatchIn(lines[i])) continue
+            val window = lines.subList(i, minOf(i + 30, lines.size)).joinToString("\n")
+            val uid = ownerUidRx.find(window)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+            if (uid > 1000) return uid
         }
-
         return null
     }
 
