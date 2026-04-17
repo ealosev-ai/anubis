@@ -7,26 +7,53 @@ import android.os.IBinder
 import sgnv.anubis.app.BuildConfig
 import sgnv.anubis.app.IUserService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
+
+enum class FreezeMode {
+    /** `pm disable-user --user 0` — шлёт PACKAGE_REMOVED, ломает иконки в папках Honor-лаунчера. */
+    DISABLE_USER,
+
+    /**
+     * `pm suspend --user 0` — приложение запускается в диалог «приостановлено»,
+     * PACKAGE_REMOVED НЕ шлётся. Цель: не разрушать структуру папок лаунчера
+     * после заморозки. Требует Android 7+.
+     */
+    SUSPEND,
+}
 
 class ShizukuManager(private val packageManager: PackageManager) {
 
     @Volatile
     private var userService: IUserService? = null
 
+    /**
+     * Способ заморозки. Меняется рантайм из настроек (SettingsScreen). Volatile —
+     * чтобы freeze/unfreeze с разных потоков (Tile/Shortcut/VM) видели свежее значение.
+     */
+    @Volatile
+    var freezeMode: FreezeMode = FreezeMode.DISABLE_USER
+
     private val _status = MutableStateFlow(ShizukuStatus.UNAVAILABLE)
     val status: StateFlow<ShizukuStatus> = _status
+
+    private val _userServiceConnected = MutableStateFlow(false)
+    val userServiceConnected: StateFlow<Boolean> = _userServiceConnected
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             userService = IUserService.Stub.asInterface(binder)
+            _userServiceConnected.value = userService != null
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             userService = null
+            _userServiceConnected.value = false
         }
     }
 
@@ -120,6 +147,36 @@ class ShizukuManager(private val packageManager: PackageManager) {
         } catch (_: Exception) {
         }
         userService = null
+        _userServiceConnected.value = false
+    }
+
+    /**
+     * Ждёт, пока UserService действительно забиндится. Если уже готов — возвращает сразу.
+     * Возвращает false если Shizuku недоступен/нет разрешения или тайм-аут.
+     */
+    suspend fun awaitUserService(timeoutMs: Long = 2000L): Boolean {
+        if (userService != null) return true
+        if (!isAvailable() || !hasPermission()) return false
+        bindUserService()
+        return withTimeoutOrNull(timeoutMs) {
+            _userServiceConnected.first { it }
+        } != null
+    }
+
+    /**
+     * Для сценариев после загрузки: ждёт пока сам Shizuku-демон поднимется,
+     * потом — пока UserService забиндится. Polling т.к. binder готовность приходит
+     * через глобальные listener'ы, которые мы уже навешиваем в startListening().
+     */
+    suspend fun awaitShizukuReady(totalTimeoutMs: Long = 30_000L, pollMs: Long = 500L): Boolean {
+        val deadline = System.currentTimeMillis() + totalTimeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (isAvailable() && hasPermission()) {
+                return awaitUserService(timeoutMs = deadline - System.currentTimeMillis())
+            }
+            delay(pollMs)
+        }
+        return false
     }
 
     suspend fun execShellCommand(vararg args: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -131,17 +188,32 @@ class ShizukuManager(private val packageManager: PackageManager) {
     }
 
     suspend fun freezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCommand("pm", "disable-user", "--user", "0", packageName)
+        when (freezeMode) {
+            FreezeMode.DISABLE_USER -> runCommand("pm", "disable-user", "--user", "0", packageName)
+            FreezeMode.SUSPEND -> runCommand("pm", "suspend", "--user", "0", packageName)
+        }
     }
 
     suspend fun unfreezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCommand("pm", "enable", packageName)
+        // На unfreeze делаем ОБЕ операции: приложение могло быть заморожено
+        // в одном режиме, а разморозка прилетает в другом — всё равно должно
+        // разморозиться. Ошибка одной команды не блокирует вторую.
+        val enable = runCommand("pm", "enable", packageName)
+        val unsuspend = runCommand("pm", "unsuspend", "--user", "0", packageName)
+        if (enable.isSuccess || unsuspend.isSuccess) Result.success(Unit) else enable
     }
 
     fun isAppFrozen(packageName: String): Boolean {
         return try {
             val info = packageManager.getApplicationInfo(packageName, 0)
-            !info.enabled
+            if (!info.enabled) return true
+            // В режиме SUSPEND flag `enabled` остаётся true, но приложение всё равно
+            // «заморожено» с точки зрения пользователя — проверяем через isPackageSuspended.
+            return try {
+                packageManager.isPackageSuspended(packageName)
+            } catch (_: Exception) {
+                false
+            }
         } catch (e: PackageManager.NameNotFoundException) {
             false
         }

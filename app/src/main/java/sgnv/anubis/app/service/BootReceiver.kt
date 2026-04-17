@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import sgnv.anubis.app.AnubisApp
 import sgnv.anubis.app.data.model.AppGroup
-import sgnv.anubis.app.data.repository.AppRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -20,20 +19,11 @@ class BootReceiver : BroadcastReceiver() {
 
         val app = context.applicationContext as AnubisApp
         val shizukuManager = app.shizukuManager
-        val repo = AppRepository(app.database.managedAppDao(), context)
+        val repo = app.appRepository
 
         CoroutineScope(Dispatchers.IO).launch {
-            // Wait for Shizuku to start after boot
-            repeat(10) {
-                if (shizukuManager.isAvailable() && shizukuManager.hasPermission()) {
-                    shizukuManager.bindUserService()
-                    kotlinx.coroutines.delay(300)
-                    return@repeat
-                }
-                kotlinx.coroutines.delay(1000)
-            }
-
-            if (!shizukuManager.isAvailable()) return@launch
+            // После ребута Shizuku может подняться не сразу — ждём до 30с разрешение + bind UserService.
+            if (!shizukuManager.awaitShizukuReady()) return@launch
 
             // Freeze LOCAL + VPN_ONLY on boot (no VPN active)
             for (group in listOf(AppGroup.LOCAL, AppGroup.VPN_ONLY)) {
