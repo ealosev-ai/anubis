@@ -24,14 +24,20 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +47,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +64,8 @@ import sgnv.anubis.app.data.model.ManagedApp
 import sgnv.anubis.app.service.StealthState
 import sgnv.anubis.app.shizuku.ShizukuStatus
 import sgnv.anubis.app.ui.MainViewModel
+import java.text.Collator
+import java.util.Locale
 
 private val grayscaleFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
 
@@ -101,6 +110,45 @@ fun HomeScreen(
 
     // Context menu state
     var menuApp by remember { mutableStateOf<String?>(null) }
+
+    // Search query (sorting + filtering on Home screen)
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    // Загружаем label'ы из PM одним батчем, кэшируем по составу групп.
+    // Это то, по чему потом сортируем и фильтруем — получить label в каждом item слишком поздно для сортировки.
+    val context = LocalContext.current
+    val pm = context.packageManager
+    val appLabels = remember(localApps, launchVpnApps, vpnOnlyApps) {
+        val allPkgs = (localApps + launchVpnApps + vpnOnlyApps).map { it.packageName }.toSet()
+        allPkgs.associateWith { pkg ->
+            try {
+                pm.getApplicationInfo(pkg, 0).loadLabel(pm).toString()
+            } catch (_: Exception) {
+                pkg.substringAfterLast('.')
+            }
+        }
+    }
+
+    // Сортировка: заморожённые сверху, потом по алфавиту label через Collator
+    // (корректно смешивает кириллицу и латиницу, в отличие от String.compareTo по UTF-16).
+    val collator = remember { Collator.getInstance(Locale.getDefault()) }
+    fun List<ManagedApp>.sortAndFilter(): List<ManagedApp> {
+        val q = searchQuery.trim()
+        val filtered = if (q.isEmpty()) this
+        else this.filter { (appLabels[it.packageName] ?: it.packageName).contains(q, ignoreCase = true) }
+        // frozenVersion читается выше — изменения frozen-состояния триггерят пересортировку через recomposition
+        @Suppress("UNUSED_EXPRESSION") frozenVersion
+        return filtered.sortedWith(
+            compareByDescending<ManagedApp> { viewModel.isAppFrozen(it.packageName) }
+                .then(Comparator { a, b -> collator.compare(appLabels[a.packageName] ?: a.packageName, appLabels[b.packageName] ?: b.packageName) })
+        )
+    }
+
+    val localSorted = localApps.sortAndFilter()
+    val launchVpnSorted = launchVpnApps.sortAndFilter()
+    val vpnOnlySorted = vpnOnlyApps.sortAndFilter()
+    val hasAnyApps = localApps.isNotEmpty() || launchVpnApps.isNotEmpty() || vpnOnlyApps.isNotEmpty()
+    val hasVisibleApps = localSorted.isNotEmpty() || launchVpnSorted.isNotEmpty() || vpnOnlySorted.isNotEmpty()
 
     Column(
         modifier = modifier
@@ -195,13 +243,33 @@ fun HomeScreen(
             }
         }
 
+        // Поле поиска — показываем только когда есть хоть одно приложение в группах
+        if (hasAnyApps) {
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Поиск приложения", style = MaterialTheme.typography.bodySmall) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Очистить")
+                        }
+                    }
+                },
+                singleLine = true
+            )
+        }
+
         // App groups
-        if (localApps.isNotEmpty()) {
+        if (localSorted.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             AppGroupSection(
                 title = "Без VPN",
                 subtitle = "Изолированы от VPN. Нажмите для запуска без VPN",
-                apps = localApps,
+                apps = localSorted,
                 tintColor = MaterialTheme.colorScheme.error,
                 viewModel = viewModel,
                 frozenVersion = frozenVersion,
@@ -210,12 +278,12 @@ fun HomeScreen(
             )
         }
 
-        if (launchVpnApps.isNotEmpty()) {
+        if (launchVpnSorted.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             AppGroupSection(
                 title = "Запуск с VPN",
                 subtitle = "Нажмите для запуска через VPN",
-                apps = launchVpnApps,
+                apps = launchVpnSorted,
                 tintColor = MaterialTheme.colorScheme.primary,
                 viewModel = viewModel,
                 frozenVersion = frozenVersion,
@@ -224,12 +292,12 @@ fun HomeScreen(
             )
         }
 
-        if (vpnOnlyApps.isNotEmpty()) {
+        if (vpnOnlySorted.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             AppGroupSection(
                 title = "Только VPN",
                 subtitle = "Заморожены без VPN. Нажмите для запуска через VPN",
-                apps = vpnOnlyApps,
+                apps = vpnOnlySorted,
                 tintColor = MaterialTheme.colorScheme.tertiary,
                 viewModel = viewModel,
                 frozenVersion = frozenVersion,
@@ -238,10 +306,20 @@ fun HomeScreen(
             )
         }
 
-        if (localApps.isEmpty() && vpnOnlyApps.isEmpty() && launchVpnApps.isEmpty()) {
+        if (!hasAnyApps) {
             Spacer(Modifier.height(24.dp))
             Text(
                 "Нет приложений в группах. Добавьте во вкладке «Приложения».",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else if (!hasVisibleApps) {
+            // Есть приложения, но все отфильтрованы поиском
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Ничего не найдено по «$searchQuery».",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

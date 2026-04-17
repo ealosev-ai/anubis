@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import sgnv.anubis.app.BuildConfig
 import sgnv.anubis.app.IUserService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,7 +95,9 @@ class ShizukuManager(private val packageManager: PackageManager) {
 
     private val serviceArgs = Shizuku.UserServiceArgs(
         ComponentName(
-            "sgnv.anubis.app",
+            // Берём applicationId из BuildConfig, а не хардкод — чтобы debug-сборка
+            // с applicationIdSuffix (".debug") тоже могла забиндить свой UserService через Shizuku.
+            BuildConfig.APPLICATION_ID,
             UserService::class.java.name
         )
     )

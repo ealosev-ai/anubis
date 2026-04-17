@@ -40,6 +40,12 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            // Ставим debug рядом с release: другой applicationId = другое приложение для Android.
+            // Позволяет держать на устройстве одновременно релизную Anubis автора и наш форк.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
     }
 
     applicationVariants.all {

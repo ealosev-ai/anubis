@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sgnv.anubis.app.ui.screens.AppListScreen
+import sgnv.anubis.app.ui.screens.AuditScreen
 import sgnv.anubis.app.ui.screens.HomeScreen
 import sgnv.anubis.app.ui.screens.RecoveryScreen
 import sgnv.anubis.app.ui.screens.SettingsScreen
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
                 viewModelRef = viewModel
                 var selectedTab by rememberSaveable { mutableIntStateOf(0) }
                 var showRecovery by rememberSaveable { mutableStateOf(false) }
+                var showAudit by rememberSaveable { mutableStateOf(false) }
 
                 Scaffold(
                     bottomBar = {
@@ -80,10 +82,17 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { padding ->
+                    val vpnActive by viewModel.vpnActive.collectAsState()
                     if (showRecovery) {
                         RecoveryScreen(
                             viewModel = viewModel,
                             onBack = { showRecovery = false },
+                            modifier = Modifier.padding(padding)
+                        )
+                    } else if (showAudit) {
+                        AuditScreen(
+                            vpnActive = vpnActive,
+                            onBack = { showAudit = false },
                             modifier = Modifier.padding(padding)
                         )
                     } else when (selectedTab) {
@@ -99,6 +108,7 @@ class MainActivity : ComponentActivity() {
                         2 -> SettingsScreen(
                             viewModel = viewModel,
                             onOpenRecovery = { showRecovery = true },
+                            onOpenAudit = { showAudit = true },
                             modifier = Modifier.padding(padding)
                         )
                     }

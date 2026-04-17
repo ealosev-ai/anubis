@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".AnubisApp"
@@ -44,6 +45,7 @@
         <service
             android:name=".service.StealthVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
@@ -66,6 +68,23 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          ADB-управление аудит-режимом: permission DUMP держит только shell,
+          чужие приложения без root этот broadcast послать не могут.
+          Использование:
+            adb shell am broadcast -a sgnv.anubis.app.ADB_ENABLE_AUDIT
+            adb shell am broadcast -a sgnv.anubis.app.ADB_DISABLE_AUDIT
+        -->
+        <receiver
+            android:name=".service.AdbAuditReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="sgnv.anubis.app.ADB_ENABLE_AUDIT" />
+                <action android:name="sgnv.anubis.app.ADB_DISABLE_AUDIT" />
             </intent-filter>
         </receiver>
 

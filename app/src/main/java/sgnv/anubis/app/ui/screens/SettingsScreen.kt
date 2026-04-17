@@ -51,6 +51,7 @@ import sgnv.anubis.app.vpn.VpnControlMode
 fun SettingsScreen(
     viewModel: MainViewModel,
     onOpenRecovery: () -> Unit = {},
+    onOpenAudit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val selectedClient by viewModel.selectedVpnClient.collectAsState()
@@ -233,6 +234,31 @@ fun SettingsScreen(
                     Text("Восстановление", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     Text(
                         "Разморозить приложения, очистить группы",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Audit entry — honeypot VPN detectors
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenAudit() }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Аудит детекторов VPN", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        "Honeypot: поймать приложения, которые сканят SOCKS5/HTTP/Tor на localhost",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
