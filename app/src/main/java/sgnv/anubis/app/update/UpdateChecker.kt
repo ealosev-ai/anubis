@@ -71,7 +71,14 @@ object UpdateChecker {
 
             val tagName = json.optString("tag_name").trimStart('v')
             val htmlUrl = json.optString("html_url")
-            val notes = json.optString("body").take(2000)
+            val rawNotes = json.optString("body")
+            val notes = rawNotes.take(2000)
+            // SHA-256 публикуем в release notes строкой `SHA256: <hex>` — это
+            // тот же автор релиза подписывает артефакт, которому ссылка на APK
+            // всё равно доверяет. Если ссылку подменят (MITM на github CDN) —
+            // хеш не совпадёт и установщик не запустится.
+            val sha256 = Regex("""SHA-?256[:\s]+([A-Fa-f0-9]{64})""")
+                .find(rawNotes)?.groupValues?.get(1)?.lowercase()
             val apkUrl = json.optJSONArray("assets")?.let { assets ->
                 var found: String? = null
                 for (i in 0 until assets.length()) {
@@ -95,6 +102,7 @@ object UpdateChecker {
                 releaseUrl = htmlUrl,
                 apkUrl = apkUrl,
                 releaseNotes = notes,
+                apkSha256 = sha256,
             )
         } catch (e: Exception) {
             null

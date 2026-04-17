@@ -6,6 +6,12 @@ data class UpdateInfo(
     val releaseUrl: String,
     val apkUrl: String?,
     val releaseNotes: String,
+    /**
+     * Ожидаемая SHA-256 APK в hex. Парсится из release body
+     * по паттерну `SHA256: <64 hex>`. Если null — установить можно только
+     * через браузер (без проверки целостности).
+     */
+    val apkSha256: String? = null,
 ) {
     val isUpdateAvailable: Boolean get() = compareVersions(latestVersion, currentVersion) > 0
 

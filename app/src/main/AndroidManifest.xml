@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Для self-update: запускаем installer через ACTION_VIEW на content:// URI FileProvider'а. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".AnubisApp"
@@ -96,6 +98,21 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <!--
+          FileProvider для self-update APK. Authorities зависят от applicationId,
+          поэтому debug-сборка (".debug") получает отдельный authority и не
+          конфликтует с релизом автора, если оба установлены рядом.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 
