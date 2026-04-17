@@ -183,6 +183,121 @@ class StealthOrchestrator(
     }
 
     /**
+     * Work Environment — полный цикл «режим работы через VPN» одной кнопкой.
+     *
+     * ВКЛ (enableWorkEnvironment):
+     *   1. freeze LOCAL — банки уснули ДО того как VPN поднялся.
+     *   2. start VPN + ждём vpnActive=true.
+     *   3. unfreeze VPN_ONLY + LAUNCH_VPN — иконки вернулись на launcher.
+     *   4. launchApp() каждое из них с задержкой 500ms — поднимаем процессы
+     *      (push-уведомления Telegram, подгрузка YouTube, etc).
+     *
+     * В отличие от обычного [enable] — этот метод ещё и размораживает+стартует
+     * VPN-группу, «разворачивает рабочее окружение» оптом вместо launch иконок
+     * по одной.
+     */
+    suspend fun enableWorkEnvironment(client: SelectedVpnClient) {
+        _lastError.value = null
+        _state.value = StealthState.ENABLING
+
+        if (!checkShizuku()) return
+
+        if (shizukuManager.isAppFrozen(client.packageName)) {
+            fail("VPN-клиент ${client.displayName} заморожен!")
+            return
+        }
+
+        // 1 — freeze LOCAL (банки уснули)
+        freezeGroup(AppGroup.LOCAL)
+
+        // 2 — start VPN + ждём фактического поднятия (MANUAL не попадает сюда —
+        // там vpnActive сам не выставится, сразу идём в unfreeze с warning)
+        vpnClientManager.startVPN(client)
+
+        if (client.controlMode == VpnControlMode.MANUAL) {
+            _lastError.value = "Подключите VPN вручную в ${client.displayName}, " +
+                "потом заново нажмите «Рабочее окружение»"
+            _state.value = StealthState.DISABLED
+            return
+        }
+
+        if (!waitForVpnOn(timeoutMs = 5_000)) {
+            _lastError.value = "VPN не поднялся за 5с — приложения НЕ запущены"
+            _state.value = StealthState.ENABLED  // VPN pending, но LOCAL заморожены
+            return
+        }
+
+        // 3 — unfreeze VPN-группу (только теперь, когда тоннель готов)
+        val vpnGroup = repository.getPackagesByGroup(AppGroup.VPN_ONLY) +
+            repository.getPackagesByGroup(AppGroup.LAUNCH_VPN)
+        unfreezeAll(vpnGroup)
+        bumpVersion()
+
+        // 4 — launch каждое. delay(500) чтобы Android не отменил предыдущий
+        // startActivity когда сразу прилетает следующий NEW_TASK.
+        for (pkg in vpnGroup) {
+            if (shizukuManager.isAppInstalled(pkg)) {
+                vpnClientManager.launchApp(pkg)
+                delay(500)
+            }
+        }
+
+        _state.value = StealthState.ENABLED
+    }
+
+    /**
+     * Work Environment OFF: freeze VPN-группу → stop VPN → unfreeze LOCAL.
+     *
+     * Порядок важен для безопасности: замораживаем Telegram/YouTube ДО падения
+     * VPN — их процессы умирают, фоновые запросы не успеют уйти через открытый
+     * канал. Потом 3-phase stop. В конце размораживаем LOCAL чтобы пользователь
+     * мог запускать банки обычным тапом по иконке.
+     */
+    suspend fun disableWorkEnvironment(
+        client: SelectedVpnClient,
+        detectedPackage: String?,
+    ) {
+        _lastError.value = null
+        _state.value = StealthState.DISABLING
+
+        if (!checkShizuku()) return
+
+        // 1 — freeze VPN-группа (процессы убиты, push-синхронизация не пойдёт)
+        freezeGroup(AppGroup.VPN_ONLY)
+        freezeGroup(AppGroup.LAUNCH_VPN)
+        bumpVersion()
+
+        // 2 — stop VPN (3-phase)
+        if (vpnClientManager.vpnActive.value) {
+            if (!stopVpn(client, detectedPackage)) {
+                _lastError.value = "Не удалось отключить VPN. LOCAL остался заморожен."
+                _state.value = StealthState.ENABLED
+                return
+            }
+        }
+
+        // 3 — unfreeze LOCAL (банки доступны в launcher)
+        val localGroup = repository.getPackagesByGroup(AppGroup.LOCAL)
+        unfreezeAll(localGroup)
+        bumpVersion()
+
+        _state.value = StealthState.DISABLED
+    }
+
+    private suspend fun unfreezeAll(packages: Set<String>) = coroutineScope {
+        val sem = Semaphore(permits = FREEZE_PARALLELISM)
+        packages.map { pkg ->
+            async {
+                sem.withPermit {
+                    if (shizukuManager.isAppInstalled(pkg) && shizukuManager.isAppFrozen(pkg)) {
+                        shizukuManager.unfreezeApp(pkg)
+                    }
+                }
+            }
+        }.awaitAll()
+    }
+
+    /**
      * Manual freeze/unfreeze from context menu.
      */
     suspend fun toggleAppFrozen(packageName: String) {
@@ -248,6 +363,16 @@ class StealthOrchestrator(
             delay(200)
             vpnClientManager.refreshVpnState()
             if (!vpnClientManager.vpnActive.value) return true
+        }
+        return false
+    }
+
+    private suspend fun waitForVpnOn(timeoutMs: Long): Boolean {
+        val steps = (timeoutMs / 200).toInt()
+        repeat(steps) {
+            delay(200)
+            vpnClientManager.refreshVpnState()
+            if (vpnClientManager.vpnActive.value) return true
         }
         return false
     }

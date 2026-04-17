@@ -167,6 +167,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * «Рабочее окружение» — одна кнопка разворачивает всё окружение через VPN.
+     * Подробности в [StealthOrchestrator.enableWorkEnvironment]. Если state
+     * сейчас DISABLED → enableWorkEnvironment; если ENABLED — disableWorkEnvironment.
+     */
+    fun toggleWorkEnvironment() {
+        viewModelScope.launch {
+            if (stealthState.value == StealthState.DISABLED) {
+                orchestrator.enableWorkEnvironment(settingsController.selectedVpnClient.value)
+                if (orchestrator.state.value == StealthState.ENABLED) {
+                    VpnMonitorService.start(getApplication())
+                }
+            } else if (stealthState.value == StealthState.ENABLED) {
+                val detectedPkg = vpnClientManager.activeVpnPackage.value
+                val detectedClient = vpnClientManager.activeVpnClient.value
+                val clientToStop = if (detectedClient != null) SelectedVpnClient.fromKnown(detectedClient)
+                    else detectedPkg?.let { SelectedVpnClient.fromPackage(it) }
+                    ?: settingsController.selectedVpnClient.value
+                orchestrator.disableWorkEnvironment(clientToStop, detectedPkg)
+                if (orchestrator.state.value == StealthState.DISABLED) {
+                    VpnMonitorService.stop(getApplication())
+                }
+            }
+        }
+    }
+
     fun launchWithVpn(packageName: String) {
         viewModelScope.launch {
             orchestrator.launchWithVpn(packageName, settingsController.selectedVpnClient.value)

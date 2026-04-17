@@ -250,6 +250,65 @@ class StealthOrchestratorTest {
     }
 
     @Test
+    fun enableWorkEnvironment_runs_full_cycle() = runTest {
+        // Должен: freeze LOCAL → start VPN (→ vpnActive=true от FakeVpn.startVPN) →
+        // waitForVpnOn увидит active → unfreeze VPN_ONLY + LAUNCH_VPN → launchApp каждого.
+        // FakeVpnControls.startVPN уже выставляет vpnActive=true, так что waitForVpnOn
+        // увидит его на первой итерации.
+        // LAUNCH_VPN app заранее frozen — чтобы проверить unfreeze.
+        shizuku.frozen.add("org.example.chat")
+        val o = orchestrator()
+        o.enableWorkEnvironment(v2rayNg)
+
+        assertEquals(StealthState.ENABLED, o.state.value)
+        // LOCAL заморожены
+        assertTrue(shizuku.frozen.containsAll(setOf("ru.rshb.dbo", "com.ozon.app.android")))
+        // VPN-apps разморожены
+        assertFalse("com.telegram должен быть разморожен",
+            shizuku.frozen.contains("com.telegram"))
+        assertFalse("org.example.chat должен быть разморожен",
+            shizuku.frozen.contains("org.example.chat"))
+        // И запущены
+        assertTrue("VPN-apps должны были стартовать через launchApp",
+            vpn.launchedApps.containsAll(listOf("com.telegram", "org.example.chat")))
+    }
+
+    @Test
+    fun enableWorkEnvironment_aborts_on_manual_client() = runTest {
+        // MANUAL-клиент (Amnezia) — мы не ждём автоматического подъёма VPN,
+        // сразу выходим с сообщением «подключите вручную».
+        val o = orchestrator()
+        o.enableWorkEnvironment(amnezia)
+
+        assertEquals(StealthState.DISABLED, o.state.value)
+        assertTrue(o.lastError.value?.contains("вручную") == true)
+        // VPN-apps НЕ должны быть запущены (VPN не поднят)
+        assertTrue("VPN-apps не должны стартовать пока VPN не up",
+            vpn.launchedApps.isEmpty())
+    }
+
+    @Test
+    fun disableWorkEnvironment_freezes_vpn_apps_then_stops_vpn_then_unfreezes_LOCAL() = runTest {
+        // Setup: state ENABLED, VPN up, LOCAL заморожено, VPN-apps разморожены.
+        shizuku.frozen.addAll(setOf("ru.rshb.dbo", "com.ozon.app.android"))  // LOCAL frozen
+        vpn.vpnActiveState.value = true
+        vpn.refreshEffect = { vpn.vpnActiveState.value = false }
+        val o = orchestrator()
+        o.enable(v2rayNg)  // state = ENABLED
+        vpn.vpnActiveState.value = true
+
+        o.disableWorkEnvironment(v2rayNg, detectedPackage = null)
+
+        assertEquals(StealthState.DISABLED, o.state.value)
+        // VPN-apps заморожены (процессы убиты ДО падения VPN)
+        assertTrue(shizuku.frozen.contains("com.telegram"))
+        assertTrue(shizuku.frozen.contains("org.example.chat"))
+        // LOCAL разморожены (банки доступны пользователю)
+        assertFalse(shizuku.frozen.contains("ru.rshb.dbo"))
+        assertFalse(shizuku.frozen.contains("com.ozon.app.android"))
+    }
+
+    @Test
     fun freezeGroup_skips_frozen_and_missing_packages() = runTest {
         // com.ozon.app.android — уже заморожен (повторная заморозка ни к чему)
         // ru.rshb.dbo — не installed (miss)

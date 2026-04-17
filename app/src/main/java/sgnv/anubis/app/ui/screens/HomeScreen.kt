@@ -240,6 +240,55 @@ fun HomeScreen(
             }
         }
 
+        // Рабочее окружение — расширенный toggle: ВКЛ разворачивает весь
+        // VPN-контур (freeze LOCAL → start VPN → unfreeze + launch VPN-apps),
+        // ВЫКЛ симметрично свёртывает. В отличие от обычной "ЗАЩИТА" (которая
+        // только морозит LOCAL и стартует VPN), этот цикл ещё и поднимает
+        // Telegram/YouTube/etc одним нажатием.
+        Spacer(Modifier.height(8.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Рабочее окружение",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        if (isEnabled)
+                            "ВКЛ: VPN up, VPN-apps разморожены и запущены"
+                        else
+                            "ВЫКЛ: одним тапом развернуть весь контур VPN",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (isTransitioning) {
+                    CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                } else {
+                    TextButton(
+                        onClick = {
+                            val vpnIntent = viewModel.getVpnPermissionIntent()
+                            if (vpnIntent != null) { onRequestVpnPermission(vpnIntent); return@TextButton }
+                            viewModel.toggleWorkEnvironment()
+                        },
+                        enabled = !isTransitioning && shizukuStatus == ShizukuStatus.READY,
+                    ) {
+                        Text(if (isEnabled) "Свернуть" else "Развернуть")
+                    }
+                }
+            }
+        }
+
         // Error / Shizuku warning
         lastError?.let { error ->
             Spacer(Modifier.height(8.dp))
