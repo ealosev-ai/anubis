@@ -6,8 +6,6 @@ import android.net.NetworkCapabilities
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import sgnv.anubis.app.AnubisApp
-import sgnv.anubis.app.data.repository.AppRepository
-import sgnv.anubis.app.vpn.VpnClientManager
 import sgnv.anubis.app.vpn.SelectedVpnClient
 import sgnv.anubis.app.vpn.VpnClientType
 import kotlinx.coroutines.CoroutineScope
@@ -30,21 +28,18 @@ class StealthTileService : TileService() {
 
         val app = application as AnubisApp
         val shizukuManager = app.shizukuManager
-        val vpnClientManager = VpnClientManager(this, shizukuManager)
-        val repo = AppRepository(app.database.managedAppDao(), this)
-        val orchestrator = StealthOrchestrator(this, shizukuManager, vpnClientManager, repo)
+        val vpnClientManager = app.vpnClientManager
+        val orchestrator = app.orchestrator
 
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
         val pkg = prefs.getString("vpn_client_package", null) ?: VpnClientType.V2RAY_NG.packageName
         val client = SelectedVpnClient.fromPackage(pkg)
 
-        // Ensure UserService is bound (instant if Shizuku is ready)
-        shizukuManager.bindUserService()
-        vpnClientManager.startMonitoringVpn()
-
         scope.launch {
-            // Small delay for UserService connection callback
-            kotlinx.coroutines.delay(200)
+            if (!shizukuManager.awaitUserService()) {
+                updateTile()
+                return@launch
+            }
 
             val vpnActive = isVpnActive()
 
@@ -61,7 +56,6 @@ class StealthTileService : TileService() {
                 }
             }
 
-            vpnClientManager.stopMonitoringVpn()
             updateTile()
         }
     }

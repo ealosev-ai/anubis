@@ -5,13 +5,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import sgnv.anubis.app.AnubisApp
 import sgnv.anubis.app.data.model.AppGroup
-import sgnv.anubis.app.data.repository.AppRepository
-import sgnv.anubis.app.vpn.VpnClientManager
 import sgnv.anubis.app.vpn.SelectedVpnClient
 import sgnv.anubis.app.vpn.VpnClientType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -29,21 +26,19 @@ class ShortcutActivity : ComponentActivity() {
 
         val app = applicationContext as AnubisApp
         val shizukuManager = app.shizukuManager
-        val vpnClientManager = VpnClientManager(this, shizukuManager)
-        val repository = AppRepository(app.database.managedAppDao(), this)
-        val orchestrator = StealthOrchestrator(this, shizukuManager, vpnClientManager, repository)
+        val vpnClientManager = app.vpnClientManager
+        val orchestrator = app.orchestrator
 
         val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
         val pkg = prefs.getString("vpn_client_package", null) ?: VpnClientType.V2RAY_NG.packageName
         val client = SelectedVpnClient.fromPackage(pkg)
 
-        // Ensure UserService is bound (instant if already connected)
-        shizukuManager.bindUserService()
-        vpnClientManager.startMonitoringVpn()
-
         CoroutineScope(Dispatchers.Main).launch {
-            // Brief delay for UserService callback
-            delay(200)
+            // Ждём реальный коннект UserService, а не гадаем через delay().
+            if (!shizukuManager.awaitUserService()) {
+                finish()
+                return@launch
+            }
 
             when (group) {
                 AppGroup.LOCAL -> {
@@ -60,7 +55,6 @@ class ShortcutActivity : ComponentActivity() {
                 }
             }
 
-            vpnClientManager.stopMonitoringVpn()
             finish()
         }
     }

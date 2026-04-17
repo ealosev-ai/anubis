@@ -19,7 +19,6 @@ import kotlinx.coroutines.launch
 import sgnv.anubis.app.AnubisApp
 import sgnv.anubis.app.R
 import sgnv.anubis.app.data.model.AppGroup
-import sgnv.anubis.app.data.repository.AppRepository
 import sgnv.anubis.app.ui.MainActivity
 
 /**
@@ -98,12 +97,9 @@ class VpnMonitorService : Service() {
     private suspend fun freezeGroup(group: AppGroup) {
         val app = applicationContext as AnubisApp
         val shizukuManager = app.shizukuManager
-        if (!shizukuManager.isAvailable() || !shizukuManager.hasPermission()) return
-        shizukuManager.bindUserService()
-        kotlinx.coroutines.delay(200)
+        if (!shizukuManager.awaitUserService()) return
 
-        val repo = AppRepository(app.database.managedAppDao(), applicationContext)
-        val packages = repo.getPackagesByGroup(group)
+        val packages = app.appRepository.getPackagesByGroup(group)
         for (pkg in packages) {
             if (shizukuManager.isAppInstalled(pkg) && !shizukuManager.isAppFrozen(pkg)) {
                 shizukuManager.freezeApp(pkg)
