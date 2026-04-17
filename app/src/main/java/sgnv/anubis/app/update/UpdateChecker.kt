@@ -16,11 +16,41 @@ import java.net.URL
  */
 object UpdateChecker {
 
-    private const val API_URL = "https://api.github.com/repos/sogonov/anubis/releases/latest"
+    /**
+     * Источник релизов хранится в prefs: `fork` (default, свой форк),
+     * `upstream` (автор оригинала), `off` (не проверять ничего).
+     * Форк сильно расходится с оригиналом — автоматически тянуть обновления
+     * автора на нашу сборку нельзя (снесёт нашу логику).
+     */
+    private const val FORK_REPO = "ealosev-ai/anubis"
+    private const val UPSTREAM_REPO = "sogonov/anubis"
+
     private const val PREFS = "settings"
+    private const val KEY_SOURCE = "update_source"
     private const val KEY_ENABLED = "update_check_enabled"
     private const val KEY_LAST_CHECK_MS = "update_last_check_ms"
     private const val KEY_SKIPPED_VERSION = "update_skipped_version"
+
+    private fun apiUrl(context: Context): String? {
+        val source = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_SOURCE, "fork") ?: "fork"
+        val repo = when (source) {
+            "upstream" -> UPSTREAM_REPO
+            "fork" -> FORK_REPO
+            else -> return null  // off
+        }
+        return "https://api.github.com/repos/$repo/releases/latest"
+    }
+
+    fun getSource(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_SOURCE, "fork") ?: "fork"
+
+    fun setSource(context: Context, source: String) {
+        val normalized = if (source in setOf("fork", "upstream", "off")) source else "fork"
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_SOURCE, normalized).apply()
+    }
 
     private const val MIN_INTERVAL_MS = 60 * 60 * 1000L  // 1 час
 
@@ -48,6 +78,7 @@ object UpdateChecker {
      */
     suspend fun check(context: Context, force: Boolean = false): UpdateInfo? = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val apiUrl = apiUrl(context) ?: return@withContext null  // source = off
         val now = System.currentTimeMillis()
         val lastCheck = prefs.getLong(KEY_LAST_CHECK_MS, 0L)
 
@@ -56,7 +87,7 @@ object UpdateChecker {
         }
 
         try {
-            val conn = (URL(API_URL).openConnection() as HttpURLConnection).apply {
+            val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("Accept", "application/vnd.github+json")
                 setRequestProperty("User-Agent", "Anubis/${BuildConfig.VERSION_NAME}")
