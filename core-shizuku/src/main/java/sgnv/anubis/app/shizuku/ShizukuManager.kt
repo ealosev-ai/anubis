@@ -35,7 +35,7 @@ class ShizukuManager(
      * но после выделения в library module BuildConfig хоста здесь недоступен.
      */
     private val hostPackageName: String,
-) : ShellExec {
+) : ShellExec, FreezeActions {
 
     override suspend fun runShell(vararg args: String): String? = runCommandWithOutput(*args)
 
@@ -111,7 +111,7 @@ class ShizukuManager(
         }
     }
 
-    fun isAvailable(): Boolean {
+    override fun isAvailable(): Boolean {
         return try {
             Shizuku.pingBinder()
         } catch (e: Exception) {
@@ -119,7 +119,7 @@ class ShizukuManager(
         }
     }
 
-    fun hasPermission(): Boolean {
+    override fun hasPermission(): Boolean {
         return try {
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         } catch (e: Exception) {
@@ -195,18 +195,18 @@ class ShizukuManager(
         runCommand(*args)
     }
 
-    suspend fun forceStopApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun forceStopApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCommand("am", "force-stop", packageName)
     }
 
-    suspend fun freezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun freezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
         when (freezeMode) {
             FreezeMode.DISABLE_USER -> runCommand("pm", "disable-user", "--user", "0", packageName)
             FreezeMode.SUSPEND -> runCommand("pm", "suspend", "--user", "0", packageName)
         }
     }
 
-    suspend fun unfreezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun unfreezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
         // На unfreeze делаем ОБЕ операции: приложение могло быть заморожено
         // в одном режиме, а разморозка прилетает в другом — всё равно должно
         // разморозиться. Ошибка одной команды не блокирует вторую.
@@ -215,7 +215,7 @@ class ShizukuManager(
         if (enable.isSuccess || unsuspend.isSuccess) Result.success(Unit) else enable
     }
 
-    fun isAppFrozen(packageName: String): Boolean {
+    override fun isAppFrozen(packageName: String): Boolean {
         return try {
             val info = packageManager.getApplicationInfo(packageName, 0)
             if (!info.enabled) return true
@@ -231,7 +231,7 @@ class ShizukuManager(
         }
     }
 
-    fun isAppInstalled(packageName: String): Boolean {
+    override fun isAppInstalled(packageName: String): Boolean {
         return try {
             packageManager.getApplicationInfo(packageName, 0)
             true

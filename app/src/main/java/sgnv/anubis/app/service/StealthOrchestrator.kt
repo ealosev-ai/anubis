@@ -2,11 +2,11 @@ package sgnv.anubis.app.service
 
 import android.content.Context
 import sgnv.anubis.app.data.model.AppGroup
-import sgnv.anubis.app.data.repository.AppRepository
-import sgnv.anubis.app.shizuku.ShizukuManager
+import sgnv.anubis.app.data.repository.PackageGroupsReader
+import sgnv.anubis.app.shizuku.FreezeActions
 import sgnv.anubis.app.vpn.SelectedVpnClient
-import sgnv.anubis.app.vpn.VpnClientManager
 import sgnv.anubis.app.vpn.VpnControlMode
+import sgnv.anubis.app.vpn.VpnControls
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -30,9 +30,15 @@ import kotlinx.coroutines.sync.withPermit
  */
 class StealthOrchestrator(
     private val context: Context,
-    private val shizukuManager: ShizukuManager,
-    private val vpnClientManager: VpnClientManager,
-    private val repository: AppRepository,
+    private val shizukuManager: FreezeActions,
+    private val vpnClientManager: VpnControls,
+    private val repository: PackageGroupsReader,
+    /**
+     * Как поднять decoy VPN для revoke'а чужого туннеля (step 2 трёх-фазного stop).
+     * По умолчанию — [StealthVpnService.disconnect], но тесты подсовывают no-op
+     * чтобы не трогать VpnService framework.
+     */
+    private val decoyDisconnect: (Context) -> Unit = StealthVpnService::disconnect,
 ) {
     private val _state = MutableStateFlow(StealthState.DISABLED)
     val state: StateFlow<StealthState> = _state
@@ -204,7 +210,7 @@ class StealthOrchestrator(
         }
 
         // Step 2: Dummy VPN — take over as VPN, system kills theirs
-        StealthVpnService.disconnect(context)
+        decoyDisconnect(context)
         if (waitForVpnOff(2000)) return true
 
         // Step 3: Force-stop the detected VPN app

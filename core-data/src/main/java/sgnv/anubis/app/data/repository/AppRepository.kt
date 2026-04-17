@@ -14,8 +14,8 @@ import kotlinx.coroutines.withContext
 class AppRepository(
     private val dao: ManagedAppDao,
     private val context: Context
-) : GroupsStore {
-    suspend fun getPackagesByGroup(group: AppGroup): Set<String> =
+) : GroupsStore, PackageGroupsReader {
+    override suspend fun getPackagesByGroup(group: AppGroup): Set<String> =
         dao.getPackageNamesByGroup(group).toSet()
 
     suspend fun getAllManagedPackages(): List<String> =

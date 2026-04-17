@@ -114,6 +114,9 @@ dependencies {
     // Тесты (jvm/unit) — Android-framework не тянем, только чистая логика.
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // mockito-core — только для Context mock в StealthOrchestratorTest
+    // (Orchestrator принимает Context но его не использует при unit-сценариях).
+    testImplementation("org.mockito:mockito-core:5.12.0")
 
     // Instrumentation-тесты: бегут на реальном устройстве/эмуляторе.
     // Room-testing даёт MigrationTestHelper для проверки миграций против
