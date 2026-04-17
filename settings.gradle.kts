@@ -22,3 +22,4 @@ rootProject.name = "VpnStealthSwitch"
 include(":app")
 include(":core-shizuku")
 include(":core-data")
+include(":core-audit")

@@ -101,9 +101,12 @@ dependencies {
     // Room entities/Daos/migrations — в :core-data (Room как api там,
     // для app будет transitively). Ksp-compiler тоже в :core-data.
 
-    // Library-модули: все sgnv.anubis.app.data.* и shizuku.* оттуда.
+    // Library-модули: все sgnv.anubis.app.{data,shizuku,audit}.* оттуда.
+    // core-audit уже api-transitively тянет :core-shizuku и :core-data,
+    // но для явности оставляем прямые зависимости.
     implementation(project(":core-shizuku"))
     implementation(project(":core-data"))
+    implementation(project(":core-audit"))
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

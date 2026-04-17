@@ -8,6 +8,7 @@
 /app/build
 /core-shizuku/build
 /core-data/build
+/core-audit/build
 
 # IDE
 /.idea
