@@ -3,10 +3,11 @@ package sgnv.anubis.app.audit
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onSubscription
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,7 +60,7 @@ class HoneypotInstrumentedTest {
         val port = awaitFirstListening()
             ?: run { assumeTrue("ни один honeypot-порт не свободен на устройстве", false); return@runBlocking }
 
-        val (firstHit, _) = subscribeForFirstHit(this)
+        val firstHit = subscribeForFirstHit(this)
 
         Socket("127.0.0.1", port).use { sock ->
             sock.getOutputStream().apply {
@@ -85,7 +86,7 @@ class HoneypotInstrumentedTest {
         val port = awaitFirstListening()
             ?: run { assumeTrue("нет свободных портов", false); return@runBlocking }
 
-        val (firstHit, _) = subscribeForFirstHit(this)
+        val firstHit = subscribeForFirstHit(this)
 
         val clientHello = buildTlsClientHello("api.rshb.ru")
         Socket("127.0.0.1", port).use { sock ->
@@ -102,7 +103,7 @@ class HoneypotInstrumentedTest {
         val port = awaitFirstListening()
             ?: run { assumeTrue("нет свободных портов", false); return@runBlocking }
 
-        val (firstHit, _) = subscribeForFirstHit(this)
+        val firstHit = subscribeForFirstHit(this)
 
         DatagramSocket().use { client ->
             val payload = byteArrayOf(0xDE.toByte(), 0xAD.toByte(), 0xBE.toByte(), 0xEF.toByte())
@@ -129,18 +130,20 @@ class HoneypotInstrumentedTest {
         listener.portStatus.filter { it.state == PortState.LISTENING }.first().port
     }
 
-    private suspend fun subscribeForFirstHit(
-        scope: CoroutineScope,
-    ): Pair<CompletableDeferred<AuditHit>, kotlinx.coroutines.Job> {
-        val firstHit = CompletableDeferred<AuditHit>()
+    /**
+     * async { flow.first() } — после первого emit корутина завершается сама,
+     * runBlocking не виснет в ожидании бесконечного `collect`.
+     * onSubscription гарантирует что мы подписались до того как тест шлёт клиента.
+     */
+    private suspend fun subscribeForFirstHit(scope: CoroutineScope): Deferred<AuditHit> {
         val subscribed = CompletableDeferred<Unit>()
-        val job = scope.launch {
+        val deferred = scope.async {
             listener.hits
                 .onSubscription { subscribed.complete(Unit) }
-                .collect { if (!firstHit.isCompleted) firstHit.complete(it) }
+                .first()
         }
         subscribed.await()
-        return firstHit to job
+        return deferred
     }
 
     /** Минимальная fake-реализация ShellExec для on-device тестов. */

@@ -1,11 +1,12 @@
 package sgnv.anubis.app.audit
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onSubscription
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -57,7 +58,7 @@ class HoneypotSmokeTest {
         val port = awaitFirstListening()
             ?: run { assumeTrue("Ни один honeypot-порт не свободен на этой машине", false); return@runBlocking }
 
-        val (firstHit, collector) = subscribeForFirstHit(this)
+        val firstHit = subscribeForFirstHit(this)
 
         Socket("127.0.0.1", port).use { sock ->
             sock.getOutputStream().apply {
@@ -73,7 +74,6 @@ class HoneypotSmokeTest {
         }
 
         val hit = withTimeout(3000) { firstHit.await() }
-        collector.cancel()
 
         assertEquals(port, hit.port)
         assertEquals("TCP", hit.protocol)
@@ -88,7 +88,7 @@ class HoneypotSmokeTest {
         val port = awaitFirstListening()
             ?: run { assumeTrue("Ни один honeypot-порт не свободен на этой машине", false); return@runBlocking }
 
-        val (firstHit, collector) = subscribeForFirstHit(this)
+        val firstHit = subscribeForFirstHit(this)
 
         val clientHello = buildTlsClientHello("api.rshb.ru")
         Socket("127.0.0.1", port).use { sock ->
@@ -100,7 +100,6 @@ class HoneypotSmokeTest {
         }
 
         val hit = withTimeout(3000) { firstHit.await() }
-        collector.cancel()
 
         assertEquals(port, hit.port)
         assertEquals("TCP", hit.protocol)
@@ -117,7 +116,7 @@ class HoneypotSmokeTest {
             ?: run { assumeTrue("Ни один honeypot-порт не свободен на этой машине", false); return@runBlocking }
         delay(50)  // пусть bindUdp успеет подняться
 
-        val (firstHit, collector) = subscribeForFirstHit(this)
+        val firstHit = subscribeForFirstHit(this)
 
         DatagramSocket().use { client ->
             val payload = byteArrayOf(0xCA.toByte(), 0xFE.toByte(), 0xBA.toByte(), 0xBE.toByte())
@@ -132,7 +131,6 @@ class HoneypotSmokeTest {
         }
 
         val hit = withTimeoutOrNull(3000) { firstHit.await() }
-        collector.cancel()
 
         // UDP-bind может провалиться если порт занят другим процессом именно
         // под UDP — это ок, скипаем проверку.
@@ -151,22 +149,21 @@ class HoneypotSmokeTest {
     }
 
     /**
-     * Подписывается на hits и ждёт фактического subscribe (onSubscription) —
-     * без этого race: эмит из handleClient может случиться раньше чем
-     * collector реально слушает, SharedFlow с replay=0 его потеряет.
+     * async { flow.first() } — после первого emit корутина завершается сама,
+     * runBlocking не зависает в ожидании бесконечного collect.
+     * onSubscription — гарантия что подписка активна до того как тест шлёт клиента.
      */
     private suspend fun subscribeForFirstHit(
         scope: kotlinx.coroutines.CoroutineScope,
-    ): Pair<CompletableDeferred<AuditHit>, kotlinx.coroutines.Job> {
-        val firstHit = CompletableDeferred<AuditHit>()
+    ): Deferred<AuditHit> {
         val subscribed = CompletableDeferred<Unit>()
-        val job = scope.launch {
+        val deferred = scope.async {
             listener.hits
                 .onSubscription { subscribed.complete(Unit) }
-                .collect { if (!firstHit.isCompleted) firstHit.complete(it) }
+                .first()
         }
         subscribed.await()
-        return firstHit to job
+        return deferred
     }
 
     // --- TLS ClientHello builder (тот же что в TlsSniParserTest, минимально) ---
