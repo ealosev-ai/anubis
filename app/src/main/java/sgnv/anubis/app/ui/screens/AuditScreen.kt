@@ -323,6 +323,15 @@ fun AuditScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        // Heat-map: 24 столбца по часам. Показываем только когда хоть один хит
+        // за сегодня есть — иначе просто пустой ряд серых точек, бессмысленно.
+        val hitsByHour by auditViewModel.hitsByHourToday.collectAsState()
+        if (hitsByHour.any { it > 0 }) {
+            Spacer(Modifier.height(12.dp))
+            HitsHeatMap(hitsByHour)
+            Spacer(Modifier.height(12.dp))
+        }
+
         if (suspects.isEmpty()) {
             Text(
                 when {
@@ -350,6 +359,79 @@ fun AuditScreen(
                     onMarkLocal = { auditViewModel.markSuspectAsLocal(suspect) },
                 )
                 Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Heat-map активности сканеров за сегодня. 24 столбца по часам 0..23.
+ * Высота столбца пропорциональна max-бакету (нормализуется). Нулевые часы —
+ * тонкая серая линия; активные — яркие primary. Цель: пользователь сразу
+ * видит «банк просыпается в 23:15» или «все пики в 02:00-04:00».
+ */
+@Composable
+private fun HitsHeatMap(hitsByHour: IntArray) {
+    val max = hitsByHour.max().coerceAtLeast(1)
+    val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                "Активность сканеров за сегодня",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                for (hour in 0..23) {
+                    val count = hitsByHour[hour]
+                    val heightFraction = if (count == 0) 0.04f else (count.toFloat() / max).coerceAtLeast(0.1f)
+                    val isNow = hour == currentHour
+                    val barColor = when {
+                        count == 0 -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        isNow -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.primary
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f).padding(horizontal = 1.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height((56 * heightFraction).dp)
+                                .semantics {
+                                    contentDescription = "час $hour, хитов $count"
+                                },
+                        ) {
+                            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                                drawRect(barColor)
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            // Метки времени: 00, 06, 12, 18 — чтобы не лепить 24 числа.
+            Row(modifier = Modifier.fillMaxWidth()) {
+                listOf(0, 6, 12, 18, 23).forEach { h ->
+                    Text(
+                        String.format("%02d", h),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
             }
         }
     }

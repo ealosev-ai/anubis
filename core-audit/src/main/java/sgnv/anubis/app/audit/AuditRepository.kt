@@ -58,6 +58,9 @@ class AuditRepository(
     /** Реактивный счётчик хитов с заданного момента — для HomeScreen-карточки. */
     fun countSinceFlow(sinceMs: Long): Flow<Int> = dao.countSinceFlow(sinceMs)
 
+    /** Timestamp'ы всех хитов от заданного момента — для heat-map UI. */
+    fun timestampsSinceFlow(sinceMs: Long): Flow<List<Long>> = dao.timestampsSinceFlow(sinceMs)
+
     suspend fun clear() {
         dao.clear()
         _hitLog.value = emptyList()

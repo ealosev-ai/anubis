@@ -26,4 +26,8 @@ interface AuditHitDao {
 
     @Query("SELECT COUNT(*) FROM audit_hits WHERE timestampMs >= :sinceMs")
     fun countSinceFlow(sinceMs: Long): Flow<Int>
+
+    /** Все timestamp'ы хитов за период — для heat-map. Reactive, dao emits on insert. */
+    @Query("SELECT timestampMs FROM audit_hits WHERE timestampMs >= :sinceMs ORDER BY timestampMs")
+    fun timestampsSinceFlow(sinceMs: Long): Flow<List<Long>>
 }

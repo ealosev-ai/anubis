@@ -10,8 +10,12 @@ import sgnv.anubis.app.audit.model.AuditSuspect
 import sgnv.anubis.app.service.StealthVpnService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 /**
  * VM — тонкая обёртка над application-scoped audit-компонентами в [AnubisApp].
@@ -42,6 +46,32 @@ class AuditViewModel(application: Application) : AndroidViewModel(application) {
 
     /** decoyActive — StateFlow сервиса, так что UI синхронизирован с реальностью. */
     val decoyActive: StateFlow<Boolean> = StealthVpnService.decoyActive
+
+    /**
+     * Heat-map: 24 числа — кол-во хитов в часе 0..23 за сегодня.
+     * Пересчитывается из сырых timestamp'ов (реактивный dao-flow).
+     * Для heat-map хватает агрегации на view-side — 24 бакета это копейки.
+     */
+    val hitsByHourToday: StateFlow<IntArray> =
+        app.auditRepository.timestampsSinceFlow(startOfTodayMs())
+            .map { timestamps ->
+                val buckets = IntArray(24)
+                val cal = Calendar.getInstance()
+                for (ts in timestamps) {
+                    cal.timeInMillis = ts
+                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                    buckets[hour]++
+                }
+                buckets
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), IntArray(24))
+
+    private fun startOfTodayMs(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
 
     private var statusJob: Job? = null
 
