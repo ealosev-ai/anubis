@@ -69,6 +69,27 @@ import java.util.Locale
 
 private val grayscaleFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
 
+@Composable
+private fun ShizukuBadge(status: ShizukuStatus) {
+    val (color, text) = when (status) {
+        ShizukuStatus.READY -> Color(0xFF2E7D32) to "Shizuku ON"
+        ShizukuStatus.NO_PERMISSION -> Color(0xFFEF6C00) to "Shizuku: нет разрешения"
+        ShizukuStatus.UNAVAILABLE -> Color(0xFFC62828) to "Shizuku OFF"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp)) {
+            drawCircle(color = color)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -156,6 +177,11 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        // Shizuku badge: чтобы падение демона посреди сессии было видно сразу,
+        // а не только когда пользователь попробует что-то заморозить.
+        ShizukuBadge(status = shizukuStatus)
+        Spacer(Modifier.height(8.dp))
+
         // Status + Toggle
         Card(
             modifier = Modifier.fillMaxWidth(),
