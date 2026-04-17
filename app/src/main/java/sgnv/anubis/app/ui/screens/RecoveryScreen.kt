@@ -143,7 +143,7 @@ fun RecoveryScreen(
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
                     )
                 ) {
-                    Text("Разморозить все отключённые")
+                    Text("Разморозить все замороженные")
                 }
             }
         }
@@ -178,7 +178,7 @@ fun RecoveryScreen(
     if (showScanDialog) {
         AlertDialog(
             onDismissRequest = { showScanDialog = false },
-            title = { Text("Разморозить все отключённые?") },
+            title = { Text("Разморозить все замороженные?") },
             text = {
                 Text(
                     "Anubis найдёт все отключённые пользовательские приложения на устройстве и разморозит их " +

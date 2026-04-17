@@ -32,6 +32,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -261,7 +263,13 @@ private fun PortStatusRow(status: Map<Int, PortStatus>) {
             }
             Card(
                 colors = CardDefaults.cardColors(containerColor = bg),
-                modifier = Modifier.padding(0.dp),
+                modifier = Modifier
+                    .padding(0.dp)
+                    .semantics(mergeDescendants = true) {
+                        // Две Text'ы внутри Card (номер + статус) читались по отдельности —
+                        // сливаем в одну accessible-нотацию: «порт 1080, слушаю».
+                        contentDescription = "порт $port, $label"
+                    },
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),

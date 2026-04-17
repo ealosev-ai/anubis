@@ -46,6 +46,8 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.launch
 import sgnv.anubis.app.vpn.SelectedVpnClient
 import sgnv.anubis.app.vpn.VpnClientControls
@@ -290,7 +292,10 @@ fun SettingsScreen(
                 }
                 androidx.compose.material3.Switch(
                     checked = bgMonitoring,
-                    onCheckedChange = { viewModel.setBackgroundMonitoring(it) }
+                    onCheckedChange = { viewModel.setBackgroundMonitoring(it) },
+                    modifier = Modifier.semantics {
+                        stateDescription = if (bgMonitoring) "включено" else "выключено"
+                    },
                 )
             }
         }
@@ -406,7 +411,10 @@ fun SettingsScreen(
                     }
                     androidx.compose.material3.Switch(
                         checked = updateCheckEnabled,
-                        onCheckedChange = { viewModel.setUpdateCheckEnabled(it) }
+                        onCheckedChange = { viewModel.setUpdateCheckEnabled(it) },
+                        modifier = Modifier.semantics {
+                            stateDescription = if (updateCheckEnabled) "включено" else "выключено"
+                        },
                     )
                 }
 

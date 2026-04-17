@@ -263,7 +263,7 @@ private fun AppRow(app: InstalledAppInfo, isKnownRestricted: Boolean, onCycleGro
             if (iconBitmap != null) {
                 Image(
                     bitmap = iconBitmap,
-                    contentDescription = app.label,
+                    contentDescription = if (app.isDisabled) "${app.label}, заморожено" else app.label,
                     modifier = Modifier.size(40.dp),
                     colorFilter = if (app.isDisabled) grayscaleFilter else null
                 )

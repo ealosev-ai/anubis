@@ -55,6 +55,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -229,7 +231,10 @@ fun HomeScreen(
                             if (vpnIntent != null) { onRequestVpnPermission(vpnIntent); return@Switch }
                             viewModel.toggleStealth()
                         },
-                        enabled = !isTransitioning && shizukuStatus == ShizukuStatus.READY
+                        enabled = !isTransitioning && shizukuStatus == ShizukuStatus.READY,
+                        modifier = Modifier.semantics {
+                            stateDescription = if (isEnabled) "защита активна" else "защита отключена"
+                        }
                     )
                 }
             }
@@ -584,7 +589,9 @@ private fun AppIconItem(
         if (iconBitmap != null) {
             Image(
                 bitmap = iconBitmap,
-                contentDescription = label,
+                // TalkBack озвучит состояние — без этого слепой юзер не отличит
+                // замороженную иконку от обычной (на фото grayscale заметен, голосу нет).
+                contentDescription = if (isFrozen) "$label, заморожено" else "$label, активно",
                 modifier = Modifier.size(48.dp),
                 colorFilter = if (isFrozen) grayscaleFilter else null
             )
