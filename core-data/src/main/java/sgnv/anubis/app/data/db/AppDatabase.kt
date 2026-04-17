@@ -24,7 +24,7 @@ class AppGroupConverter {
  * Миграции вынесены top-level (а не в companion), чтобы androidTest мог их
  * гонять напрямую через AppDatabaseMigrationTest без reflection-штучек.
  */
-internal val MIGRATION_3_4_EXPOSED = object : Migration(3, 4) {
+val MIGRATION_3_4_EXPOSED = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
             """
@@ -42,14 +42,14 @@ internal val MIGRATION_3_4_EXPOSED = object : Migration(3, 4) {
 }
 
 /** v4 → v5: добавили SNI hostname из TLS ClientHello. */
-internal val MIGRATION_4_5_EXPOSED = object : Migration(4, 5) {
+val MIGRATION_4_5_EXPOSED = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE `audit_hits` ADD COLUMN `sni` TEXT")
     }
 }
 
 /** v5 → v6: добавили протокол TCP/UDP (default TCP для старых записей). */
-internal val MIGRATION_5_6_EXPOSED = object : Migration(5, 6) {
+val MIGRATION_5_6_EXPOSED = object : Migration(5, 6) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
             "ALTER TABLE `audit_hits` ADD COLUMN `protocol` TEXT NOT NULL DEFAULT 'TCP'"

@@ -14,24 +14,24 @@ import kotlinx.coroutines.withContext
 class AppRepository(
     private val dao: ManagedAppDao,
     private val context: Context
-) {
+) : GroupsStore {
     suspend fun getPackagesByGroup(group: AppGroup): Set<String> =
         dao.getPackageNamesByGroup(group).toSet()
 
     suspend fun getAllManagedPackages(): List<String> =
         AppGroup.entries.flatMap { getPackagesByGroup(it) }.distinct()
 
-    suspend fun getAppsByGroup(group: AppGroup): List<ManagedApp> =
+    override suspend fun getAppsByGroup(group: AppGroup): List<ManagedApp> =
         dao.getByGroup(group)
 
     suspend fun getAppGroup(packageName: String): AppGroup? =
         dao.get(packageName)?.group
 
-    suspend fun setAppGroup(packageName: String, group: AppGroup) {
+    override suspend fun setAppGroup(packageName: String, group: AppGroup) {
         dao.insert(ManagedApp(packageName, group))
     }
 
-    suspend fun removeApp(packageName: String) {
+    override suspend fun removeApp(packageName: String) {
         dao.delete(packageName)
     }
 

@@ -30,4 +30,10 @@ dependencies {
     ksp("androidx.room:room-compiler:2.7.2")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // `org.json.*` на Android — часть framework, в JVM-тесте это stub (not mocked).
+    // Для unit-тестов GroupsBackup нужна настоящая реализация.
+    testImplementation("org.json:json:20240303")
 }

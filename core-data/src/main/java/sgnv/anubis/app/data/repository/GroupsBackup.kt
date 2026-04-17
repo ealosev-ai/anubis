@@ -23,7 +23,7 @@ object GroupsBackup {
 
     private const val VERSION = 1
 
-    suspend fun export(repo: AppRepository): String {
+    suspend fun export(repo: GroupsStore): String {
         val all = AppGroup.entries.flatMap { g ->
             repo.getAppsByGroup(g).map { g to it.packageName }
         }
@@ -48,7 +48,7 @@ object GroupsBackup {
      * @return количество фактически импортированных (merged) записей, либо -1 если
      *         формат JSON невалиден.
      */
-    suspend fun import(repo: AppRepository, json: String): Int {
+    suspend fun import(repo: GroupsStore, json: String): Int {
         return try {
             val root = JSONObject(json)
             val arr = root.optJSONArray("apps") ?: return -1
@@ -71,7 +71,7 @@ object GroupsBackup {
      * Альтернатива import — сначала очищает все managed_apps, потом применяет бекап.
      * Полезно при полном переезде с другого устройства.
      */
-    suspend fun replaceAll(repo: AppRepository, json: String): Int {
+    suspend fun replaceAll(repo: GroupsStore, json: String): Int {
         val snapshot = try {
             val root = JSONObject(json)
             val arr = root.optJSONArray("apps") ?: return -1
