@@ -275,33 +275,40 @@ class HoneypotListener(
             null to null
         }
 
-        // Теперь уже можно прочитать preview и закрыть — uid уже зарезолвлен.
-        // Читаем до 2 KiB: достаточно чтобы в TLS ClientHello поместился SNI
-        // (hostname обычно в первом extension). На SOCKS5 greeting хватает и 3
-        // байт, так что большие буферы не мешают.
+        // Читаем preview, парсим протокол, играем handshake до конца чтобы
+        // сканер пошёл дальше и выдал ClientHello с целевым SNI. Раньше мы
+        // обрывались после greeting — продвинутые детекторы (yourvpndead,
+        // встроенные банковские чеки) классифицировали порт как фейковый и
+        // бросали. Сейчас: CONNECT succeeded → клиент шлёт TLS → ловим SNI.
         var preview: String? = null
         var sni: String? = null
         try {
-            client.soTimeout = 400
+            // 1200 мс — даёт время на 3-phase SOCKS5 (greeting + connect + app-data),
+            // если клиент не TLS — второй read вернётся по таймауту, preview уже есть.
+            client.soTimeout = 1200
+            val input = client.getInputStream()
+            val output = client.getOutputStream()
             val buf = ByteArray(2048)
-            val n = client.getInputStream().read(buf)
+            val n = input.read(buf)
             if (n > 0) {
                 preview = buf.copyOf(minOf(n, 32)).toHexPreview()
 
-                // TLS ClientHello: `16 03 XX` + ещё байты handshake.
-                // Парсер устойчив к мусору — либо SNI, либо null.
-                if (n >= 6 && buf[0] == 0x16.toByte() && buf[1] == 0x03.toByte()) {
-                    sni = try { extractSni(buf, n) } catch (_: Exception) { null }
-                }
+                when {
+                    // TLS ClientHello на голом порту (например банк идёт прямо
+                    // в HTTPS на наш 8080). Парсим SNI сразу.
+                    n >= 6 && buf[0] == 0x16.toByte() && buf[1] == 0x03.toByte() -> {
+                        sni = try { extractSni(buf, n) } catch (_: Exception) { null }
+                    }
 
-                // SOCKS5 greeting (05 01 NN) — отвечаем 05 00 (no auth),
-                // чтобы сканеры-детекторы классифицировали порт как реальный
-                // SOCKS5. Без ответа yourvpndead/RKNHardering не триггерят тревогу.
-                if (n >= 3 && buf[0] == 0x05.toByte() && buf[1] > 0) {
-                    try {
-                        client.getOutputStream().write(byteArrayOf(0x05, 0x00))
-                        client.getOutputStream().flush()
-                    } catch (_: Exception) {}
+                    // SOCKS5: greeting (05 NN methods...) — полный handshake.
+                    n >= 3 && buf[0] == 0x05.toByte() && buf[1] > 0 -> {
+                        sni = playSocks5(input, output)
+                    }
+
+                    // HTTP CONNECT: «CONNECT host:443 HTTP/1.1\r\n...»
+                    n >= 7 && buf[0] == 'C'.code.toByte() && buf[1] == 'O'.code.toByte() -> {
+                        sni = playHttpConnect(input, output)
+                    }
                 }
             }
         } catch (_: Exception) {
@@ -331,6 +338,77 @@ class HoneypotListener(
         )
     }
 
+    /**
+     * Полноценный SOCKS5 handshake. Сканер: `05 01 00` (один method — no auth),
+     * мы: `05 00`, сканер: `05 01 00 ATYP ADDR PORT` (CONNECT), мы: `05 00 00 01 0 0`.
+     * После этого клиент слепо шлёт application data — обычно TLS ClientHello
+     * на целевой хост. Мы читаем ClientHello и извлекаем target-SNI.
+     *
+     * Прокси мы разумеется НЕ делаем — данные никуда не уходят, мы просто
+     * притворяемся что есть backend. Для сканера это «живой прокси», для
+     * нас — forensic data о том, куда хотели туннелировать.
+     */
+    private fun playSocks5(
+        input: java.io.InputStream,
+        output: java.io.OutputStream,
+    ): String? {
+        // Greeting: принимаем и отвечаем «no-auth».
+        output.write(byteArrayOf(0x05, 0x00))
+        output.flush()
+
+        // Далее клиент шлёт CONNECT request: [VER CMD RSV ATYP ADDR... PORT(2)]
+        // ATYP = 0x01 (IPv4, 4b), 0x03 (domain, len-prefix), 0x04 (IPv6, 16b)
+        val reqBuf = ByteArray(262)  // max: 4 header + 1 len + 255 domain + 2 port
+        val reqN = try { input.read(reqBuf) } catch (_: Exception) { return null }
+        if (reqN < 7 || reqBuf[0] != 0x05.toByte()) return null
+
+        // Ответ «succeeded» — `05 00 00 01 0.0.0.0 :0000`. BND.ADDR/PORT
+        // ноль — стандартно для серверов которые не раскрывают свой upstream.
+        output.write(byteArrayOf(0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0))
+        output.flush()
+
+        // Теперь клиент уверен что мы подключились, и начинает слать данные
+        // на «backend». Читаем — если TLS ClientHello, вытащим SNI.
+        val appBuf = ByteArray(2048)
+        val appN = try { input.read(appBuf) } catch (_: Exception) { return null }
+        if (appN >= 6 && appBuf[0] == 0x16.toByte() && appBuf[1] == 0x03.toByte()) {
+            return try { extractSni(appBuf, appN) } catch (_: Exception) { null }
+        }
+        return null
+    }
+
+    /**
+     * HTTP CONNECT proxy — `CONNECT target:443 HTTP/1.1\r\nHost: ...\r\n\r\n`.
+     * Отвечаем 200 OK, ждём TLS ClientHello, вытаскиваем SNI.
+     *
+     * Отдельный плюс: target из CONNECT-строки сам по себе уже forensic
+     * data — но в SNI это обычно тот же хост, просто с более чистой строкой.
+     */
+    private fun playHttpConnect(
+        input: java.io.InputStream,
+        output: java.io.OutputStream,
+    ): String? {
+        // Мы уже прочитали первые байты в buf — драинием остаток заголовков
+        // до "\r\n\r\n". В реальности первое `input.read` в 99% случаев вернул
+        // всю `CONNECT` запроса, но для надёжности делаем доп-read.
+        try {
+            val extra = ByteArray(1024)
+            input.read(extra)  // best-effort, timeout держит от повисания
+        } catch (_: Exception) {}
+
+        // 200 OK — клиент пойдёт делать TLS handshake.
+        output.write("HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray(Charsets.US_ASCII))
+        output.flush()
+
+        // TLS ClientHello на target.
+        val appBuf = ByteArray(2048)
+        val appN = try { input.read(appBuf) } catch (_: Exception) { return null }
+        if (appN >= 6 && appBuf[0] == 0x16.toByte() && appBuf[1] == 0x03.toByte()) {
+            return try { extractSni(appBuf, appN) } catch (_: Exception) { null }
+        }
+        return null
+    }
+
     companion object {
         /**
          * Порты из методички Минцифры (апрель 2026) + дефолтные порты
@@ -348,11 +426,13 @@ class HoneypotListener(
         val PORTS = listOf(
             1080, 9000, 5555,             // SOCKS5 (методичка)
             9050, 9051, 9150,             // Tor
-            3128, 8080, 8888,             // HTTP CONNECT
-            10808, 10809,                 // xray-core
+            3128, 8080, 8888, 8118,       // HTTP CONNECT (+ Polipo 8118)
+            10808, 10809, 10900,          // xray-core (+ распространённый альт)
             7890,                         // Clash/mihomo
             9090,                         // Clash REST API
             2080,                         // sing-box
+            4444,                         // i2p proxy (yourvpndead сканит)
+            1090,                         // альт-SOCKS5 (shadowsocks fallback)
         )
     }
 }
