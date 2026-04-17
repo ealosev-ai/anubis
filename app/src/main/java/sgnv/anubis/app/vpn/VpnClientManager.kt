@@ -7,7 +7,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
-import sgnv.anubis.app.shizuku.ShizukuManager
+import sgnv.anubis.app.shizuku.ShellExec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,7 +22,7 @@ import kotlinx.coroutines.sync.withLock
 
 class VpnClientManager(
     private val context: Context,
-    private val shizukuManager: ShizukuManager
+    private val shell: ShellExec,
 ) : VpnControls {
 
     private val _vpnActive = MutableStateFlow(false)
@@ -80,7 +80,7 @@ class VpnClientManager(
             when (control.mode) {
                 VpnControlMode.SEPARATE -> {
                     val cmd = control.startCommand ?: return
-                    val result = shizukuManager.execShellCommand(*cmd)
+                    val result = shell.execCommand(*cmd)
                     if (result.isFailure) {
                         Log.w(TAG, "Start failed for ${client.displayName}", result.exceptionOrNull())
                         launchApp(client.packageName)
@@ -89,7 +89,7 @@ class VpnClientManager(
                 VpnControlMode.TOGGLE -> {
                     if (!_vpnActive.value) {
                         val cmd = control.startCommand ?: return
-                        val result = shizukuManager.execShellCommand(*cmd)
+                        val result = shell.execCommand(*cmd)
                         if (result.isFailure) {
                             Log.w(TAG, "Toggle-start failed for ${client.displayName}", result.exceptionOrNull())
                             launchApp(client.packageName)
@@ -111,13 +111,13 @@ class VpnClientManager(
             when (control.mode) {
                 VpnControlMode.SEPARATE -> {
                     val cmd = control.stopCommand ?: return
-                    val result = shizukuManager.execShellCommand(*cmd)
+                    val result = shell.execCommand(*cmd)
                     if (result.isFailure) Log.w(TAG, "Stop failed for ${client.displayName}", result.exceptionOrNull())
                 }
                 VpnControlMode.TOGGLE -> {
                     if (_vpnActive.value) {
                         val cmd = control.startCommand ?: return
-                        val result = shizukuManager.execShellCommand(*cmd)
+                        val result = shell.execCommand(*cmd)
                         if (result.isFailure) Log.w(TAG, "Toggle-stop failed for ${client.displayName}", result.exceptionOrNull())
                     }
                 }
@@ -248,7 +248,7 @@ class VpnClientManager(
         // Берём весь дамп в Kotlin и парсим регексами — sh-chain ломался на
         // разных форматах Android (A11 'type: VPN[', A13+ 'Transports: VPN',
         // A14+ иногда '[VPN]'). Единый парсер проще расширять.
-        val dump = shizukuManager.runCommandWithOutput("dumpsys", "connectivity")
+        val dump = shell.runShell("dumpsys", "connectivity")
             ?.takeIf { !it.startsWith("ERROR:") }
             ?: return null
 
@@ -257,7 +257,7 @@ class VpnClientManager(
         // pm list packages --uid <uid> может вернуть несколько пакетов shared-uid,
         // нам нужен ЛЮБОЙ валидный. На старом API иногда одна строка, на новом
         // Android 14 — вывод `package:a  package:b` через пробел.
-        val pkgOutput = shizukuManager.runCommandWithOutput("pm", "list", "packages", "--uid", uid.toString())
+        val pkgOutput = shell.runShell("pm", "list", "packages", "--uid", uid.toString())
             ?.takeIf { !it.startsWith("ERROR:") }
             ?: return null
 
@@ -271,7 +271,7 @@ class VpnClientManager(
 
     private suspend fun getVpnOwnerByForegroundService(): String? {
         for (client in VpnClientType.entries) {
-            val output = shizukuManager.runCommandWithOutput(
+            val output = shell.runShell(
                 "sh", "-c",
                 "dumpsys activity services ${client.packageName} 2>/dev/null | grep -c 'isForeground=true'"
             )

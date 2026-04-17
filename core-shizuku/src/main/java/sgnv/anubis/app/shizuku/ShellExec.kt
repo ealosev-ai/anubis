@@ -8,5 +8,13 @@ package sgnv.anubis.app.shizuku
  * Прод-реализация — [ShizukuManager.runCommandWithOutput]; адаптер ниже.
  */
 interface ShellExec {
+    /** Выполнить и вернуть stdout (или `"ERROR:..."` при сбое). */
     suspend fun runShell(vararg args: String): String?
+
+    /**
+     * Выполнить команду ради побочного эффекта (pm enable / am broadcast).
+     * Success если exit code 0. Нужен VpnClientManager'у чтобы проверять
+     * что команда реально выполнилась — raw stdout для этих случаев не нужен.
+     */
+    suspend fun execCommand(vararg args: String): Result<Unit>
 }

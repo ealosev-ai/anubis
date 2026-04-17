@@ -39,6 +39,8 @@ class ShizukuManager(
 
     override suspend fun runShell(vararg args: String): String? = runCommandWithOutput(*args)
 
+    override suspend fun execCommand(vararg args: String): Result<Unit> = execShellCommand(*args)
+
 
     @Volatile
     private var userService: IUserService? = null

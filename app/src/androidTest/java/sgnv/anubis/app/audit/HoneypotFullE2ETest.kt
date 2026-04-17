@@ -112,5 +112,6 @@ class HoneypotFullE2ETest {
     /** Shell-заглушка: Shizuku-fallback нам в этом тесте не нужен. */
     private class NoopShell : ShellExec {
         override suspend fun runShell(vararg args: String): String? = null
+        override suspend fun execCommand(vararg args: String): Result<Unit> = Result.success(Unit)
     }
 }

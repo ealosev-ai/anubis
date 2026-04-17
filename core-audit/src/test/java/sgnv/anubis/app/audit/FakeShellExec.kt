@@ -22,4 +22,10 @@ class FakeShellExec(
         val joined = args.joinToString(" ")
         return responses.entries.firstOrNull { joined.startsWith(it.key) }?.value
     }
+
+    /** Фейк не моделирует exit code — всегда success; тесты аудита это не трогают. */
+    override suspend fun execCommand(vararg args: String): Result<Unit> {
+        calls += args.toList()
+        return Result.success(Unit)
+    }
 }

@@ -148,6 +148,7 @@ class HoneypotInstrumentedTest {
 
     /** Минимальная fake-реализация ShellExec для on-device тестов. */
     private class FakeShell : ShellExec {
+        override suspend fun execCommand(vararg args: String): Result<Unit> = Result.success(Unit)
         override suspend fun runShell(vararg args: String): String? {
             // /proc/net/tcp на Android 10+ для не-root приложения отдаёт
             // только собственные строки с uid=0 (песочница). Для тестов
