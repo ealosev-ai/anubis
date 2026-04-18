@@ -176,7 +176,7 @@ class AuditViewModel(application: Application) : AndroidViewModel(application) {
         val label = labelFor(packageName)
         _probeState.value = ProbeState.Running(packageName, label, 0, durationSec, 0)
         probeJob = viewModelScope.launch {
-            // Если приложение заморожено (pm disable-user или pm suspend) — ни
+            // Если приложение заморожено (pm disable-user) — ни
             // `am start`, ни `monkey` не поднимут процесс (возвращают 1/252).
             // Временно размораживаем на время среза, в `finally` возвращаем в
             // исходное состояние. Пользователь не должен руками дёргать группы.

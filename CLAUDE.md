@@ -172,7 +172,7 @@ VPN liveness — `ConnectivityManager.NetworkCallback` на `TRANSPORT_VPN`. Own
 - `AppRepository.cycleGroup` продвигает `none → LOCAL → VPN_ONLY → LAUNCH_VPN → none` — AppList UI полагается на порядок.
 - `DefaultRestrictedApps` — статичный список для first-run (банки, маркетплейсы, `com.yandex.*` / `ru.yandex.*`).
 - `GroupsBackup.export/import/replaceAll` — JSON dump/restore managed_apps. Использует `GroupsStore` interface ради тестируемости.
-- Settings live в plain `SharedPreferences("settings")`. Ключи: `vpn_client_package`, `freeze_mode` (disable|suspend), `hit_action_mode` (off|ask|auto), `update_source` (fork|upstream|off), `background_monitoring`, `freeze_on_boot`, `update_last_check_ms`, `update_skipped_version`.
+- Settings live в plain `SharedPreferences("settings")`. Ключи: `vpn_client_package`, `hit_action_mode` (off|ask|auto), `update_source` (fork|upstream|off), `background_monitoring`, `freeze_on_boot`, `update_last_check_ms`, `update_skipped_version`.
 
 ### Self-update (app/update/)
 
@@ -182,7 +182,7 @@ VPN liveness — `ConnectivityManager.NetworkCallback` на `TRANSPORT_VPN`. Own
 ## Conventions worth respecting
 
 - **UI strings — русские** (см. `HomeScreen`, ошибки в `StealthOrchestrator`). Новые user-facing строки — тоже на русском.
-- **Терминология:** «заморозить / разморозить» = `pm disable-user`/`pm enable` или `pm suspend`/`unsuspend`; «отключить / включить» = VPN toggle. Не смешивать.
+- **Терминология:** «заморозить / разморозить» = `pm disable-user`/`pm enable`; «отключить / включить» = VPN toggle. Не смешивать.
 - **Accessibility:** иконки приложений озвучивают состояние (`contentDescription` включает "заморожено"/"активно"), Switch-и имеют `stateDescription`. Port-cards в AuditScreen используют `semantics(mergeDescendants = true)` для слитного TalkBack-чтения.
 - **Не мокай Shizuku в логике.** Если функции нужен shell — принимает `ShellExec` (interface в `:core-shizuku`). Не добавлять параллельный путь в обход.
 - **Broadcast/activity actions для новых VPN-клиентов** — только в `VpnClientControls`; README описывает jadx-поиск.

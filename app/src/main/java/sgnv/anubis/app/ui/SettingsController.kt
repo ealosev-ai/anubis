@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import sgnv.anubis.app.service.AuditController
 import sgnv.anubis.app.service.VpnMonitorService
-import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuManager
 import sgnv.anubis.app.vpn.SelectedVpnClient
 import sgnv.anubis.app.vpn.VpnClientManager
@@ -35,9 +34,6 @@ class SettingsController(
 
     private val _backgroundMonitoring = MutableStateFlow(loadBackgroundMonitoring())
     val backgroundMonitoring: StateFlow<Boolean> = _backgroundMonitoring
-
-    private val _freezeMode = MutableStateFlow(shizuku.freezeMode)
-    val freezeMode: StateFlow<FreezeMode> = _freezeMode
 
     private val _hitActionMode = MutableStateFlow(loadHitActionMode())
     val hitActionMode: StateFlow<String> = _hitActionMode
@@ -78,16 +74,6 @@ class SettingsController(
         _backgroundMonitoring.value = enabled
         prefs.edit().putBoolean("background_monitoring", enabled).apply()
         if (enabled) VpnMonitorService.start(context) else VpnMonitorService.stop(context)
-    }
-
-    fun setFreezeMode(mode: FreezeMode) {
-        shizuku.freezeMode = mode
-        _freezeMode.value = mode
-        val key = when (mode) {
-            FreezeMode.SUSPEND -> "suspend"
-            FreezeMode.DISABLE_USER -> "disable"
-        }
-        prefs.edit().putString("freeze_mode", key).apply()
     }
 
     fun setAuditBackground(enabled: Boolean) {

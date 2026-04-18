@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuStatus
 import sgnv.anubis.app.ui.MainViewModel
 import android.content.Intent
@@ -172,65 +171,6 @@ fun SettingsScreen(
                     )
                 }
                 RadioButton(selected = isCustomSelected, onClick = { showAppPicker = true })
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        // Freeze mode
-        Text("Режим заморозки", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "disable-user стабильнее, но на Honor/MagicOS ломает иконки в папках " +
-                "лаунчера (шлёт PACKAGE_REMOVED). Режим suspend показывает системный " +
-                "диалог «приостановлено» вместо запуска — иконки на месте.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
-        val freezeMode by viewModel.freezeMode.collectAsState()
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.setFreezeMode(FreezeMode.DISABLE_USER) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("pm disable-user", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(
-                            "Классика. Приложение отключается полностью.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    RadioButton(
-                        selected = freezeMode == FreezeMode.DISABLE_USER,
-                        onClick = { viewModel.setFreezeMode(FreezeMode.DISABLE_USER) },
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.setFreezeMode(FreezeMode.SUSPEND) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("pm suspend", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(
-                            "Android 7+. При тапе — диалог «приостановлено».",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    RadioButton(
-                        selected = freezeMode == FreezeMode.SUSPEND,
-                        onClick = { viewModel.setFreezeMode(FreezeMode.SUSPEND) },
-                    )
-                }
             }
         }
 

@@ -14,7 +14,6 @@ import sgnv.anubis.app.data.repository.GroupsBackup
 import sgnv.anubis.app.service.StealthState
 import sgnv.anubis.app.service.StealthVpnService
 import sgnv.anubis.app.service.VpnMonitorService
-import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuStatus
 import sgnv.anubis.app.update.UpdateInfo
 import sgnv.anubis.app.vpn.SelectedVpnClient
@@ -108,7 +107,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val selectedVpnClient: StateFlow<SelectedVpnClient> = settingsController.selectedVpnClient
     val installedVpnClients: StateFlow<List<VpnClientType>> = settingsController.installedVpnClients
     val backgroundMonitoring: StateFlow<Boolean> = settingsController.backgroundMonitoring
-    val freezeMode: StateFlow<FreezeMode> = settingsController.freezeMode
     val hitActionMode: StateFlow<String> = settingsController.hitActionMode
     val auditBackground: StateFlow<Boolean> = settingsController.auditBackground
     val auditDecoyWithBackground: StateFlow<Boolean> = settingsController.auditDecoyWithBackground
@@ -351,7 +349,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setUpdateSource(source: String) = updateController.setSource(source)
 
     fun setHitActionMode(mode: String) = settingsController.setHitActionMode(mode)
-    fun setFreezeMode(mode: FreezeMode) = settingsController.setFreezeMode(mode)
     fun setBackgroundMonitoring(enabled: Boolean) = settingsController.setBackgroundMonitoring(enabled)
     fun setAuditBackground(enabled: Boolean) = settingsController.setAuditBackground(enabled)
     fun setAuditDecoyWithBackground(enabled: Boolean) = settingsController.setAuditDecoyWithBackground(enabled)

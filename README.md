@@ -28,10 +28,8 @@ Android-приложение, которое защищает пользоват
 - **Auto-freeze при hit** — режимы OFF (только в списке), ASK (нотификация с кнопками), AUTO (моментальная заморозка + «Разморозить»)
 - **Экспорт лога** через ShareSheet в JSON
 
-### Режимы заморозки
-- **`pm disable-user`** (default) — надёжно, но шлёт `PACKAGE_REMOVED`, что ломает раскладку папок на лаунчерах Honor/MagicOS
-- **`pm suspend`** (Android 7+) — приложение при запуске показывает системный «приостановлено», папки лаунчера живут
-- Переключатель в Settings
+### Режим заморозки
+`pm disable-user --user 0 <pkg>` — единственный способ настоящей изоляции. `pm suspend` рассмотрен и отброшен: он не блокирует push/broadcasts/alarms, приложение просыпается от FCM и всё равно сканит сеть. Минус `disable-user`: на Honor/MagicOS шлёт `PACKAGE_REMOVED`, что ломает раскладку папок лаунчера — с этим живём.
 
 ### VPN-клиенты
 - **SEPARATE** (NekoBox) — отдельные `am start` для QuickEnable/QuickDisable
@@ -66,8 +64,8 @@ Toggle-broadcast ненадёжен для остановки (может сра
 1. `IUserService.aidl` в `:core-shizuku` определяет `execCommand` / `execCommandWithOutput`. `UserService` реализует их через `Runtime.getRuntime().exec(...)` внутри Shizuku-spawned shell-UID процесса. Процесс защищён drain-threads для stdout/stderr, 15-секундным timeout и лимитом вывода 2 MiB.
 2. `ShizukuManager` (singleton в `AnubisApp`) биндит service и предоставляет `freezeApp`, `unfreezeApp`, `isAppFrozen`, `isAppInstalled`, `runCommandWithOutput`, `execShellCommand`, `awaitUserService`.
 
-Заморозка = `pm disable-user --user 0 <pkg>` или `pm suspend --user 0 <pkg>` (по настройке).
-Разморозка = `pm enable <pkg>` + `pm unsuspend --user 0 <pkg>` (идемпотентно, чтобы переключить режим на лету).
+Заморозка = `pm disable-user --user 0 <pkg>`.
+Разморозка = `pm enable <pkg>`.
 
 ### Honeypot flow
 ```
@@ -161,7 +159,6 @@ scripts/setup-avd-shizuku.sh && ./gradlew connectedDebugAndroidTest  # 12 на A
 - [x] Background VPN monitoring service
 - [x] Export/import app group configuration
 - [x] Audit honeypot против детекторов VPN
-- [x] `pm suspend` режим для Honor/MagicOS
 - [x] Self-update с SHA-256 проверкой
 - [x] Multi-module архитектура
 - [x] E2E scenarios + unit coverage (91 тест)

@@ -17,7 +17,6 @@ import sgnv.anubis.app.audit.HoneypotListener
 import sgnv.anubis.app.data.db.AppDatabase
 import sgnv.anubis.app.data.repository.AppRepository
 import sgnv.anubis.app.service.StealthOrchestrator
-import sgnv.anubis.app.shizuku.FreezeMode
 import sgnv.anubis.app.shizuku.ShizukuManager
 import sgnv.anubis.app.vpn.VpnClientManager
 
@@ -80,18 +79,10 @@ open class AnubisApp : Application() {
         // applicationId передаём явно: ShizukuManager живёт в :core-shizuku и
         // больше не может брать его из BuildConfig хост-приложения.
         shizukuManager = ShizukuManager(packageManager, BuildConfig.APPLICATION_ID)
-        // Читаем режим заморозки из prefs: по-умолчанию disable-user (legacy),
-        // но пользователь может переключить на suspend чтоб не ломать иконки
-        // в папках лаунчера (Honor MagicOS шлёт PACKAGE_REMOVED из disable).
-        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
-        shizukuManager.freezeMode = when (prefs.getString("freeze_mode", "disable")) {
-            "suspend" -> FreezeMode.SUSPEND
-            else -> FreezeMode.DISABLE_USER
-        }
         shizukuManager.startListening()
 
         startRuntimeMonitoring()
-        checkAuditWatchdog(prefs)
+        checkAuditWatchdog(getSharedPreferences("settings", MODE_PRIVATE))
     }
 
     /**

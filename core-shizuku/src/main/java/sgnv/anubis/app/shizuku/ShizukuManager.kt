@@ -14,18 +14,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
 
-enum class FreezeMode {
-    /** `pm disable-user --user 0` — шлёт PACKAGE_REMOVED, ломает иконки в папках Honor-лаунчера. */
-    DISABLE_USER,
-
-    /**
-     * `pm suspend --user 0` — приложение запускается в диалог «приостановлено»,
-     * PACKAGE_REMOVED НЕ шлётся. Цель: не разрушать структуру папок лаунчера
-     * после заморозки. Требует Android 7+.
-     */
-    SUSPEND,
-}
-
 class ShizukuManager(
     private val packageManager: PackageManager,
     /**
@@ -44,13 +32,6 @@ class ShizukuManager(
 
     @Volatile
     private var userService: IUserService? = null
-
-    /**
-     * Способ заморозки. Меняется рантайм из настроек (SettingsScreen). Volatile —
-     * чтобы freeze/unfreeze с разных потоков (Tile/Shortcut/VM) видели свежее значение.
-     */
-    @Volatile
-    var freezeMode: FreezeMode = FreezeMode.DISABLE_USER
 
     private val _status = MutableStateFlow(ShizukuStatus.UNAVAILABLE)
     val status: StateFlow<ShizukuStatus> = _status
@@ -202,32 +183,16 @@ class ShizukuManager(
     }
 
     override suspend fun freezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        when (freezeMode) {
-            FreezeMode.DISABLE_USER -> runCommand("pm", "disable-user", "--user", "0", packageName)
-            FreezeMode.SUSPEND -> runCommand("pm", "suspend", "--user", "0", packageName)
-        }
+        runCommand("pm", "disable-user", "--user", "0", packageName)
     }
 
     override suspend fun unfreezeApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        // На unfreeze делаем ОБЕ операции: приложение могло быть заморожено
-        // в одном режиме, а разморозка прилетает в другом — всё равно должно
-        // разморозиться. Ошибка одной команды не блокирует вторую.
-        val enable = runCommand("pm", "enable", packageName)
-        val unsuspend = runCommand("pm", "unsuspend", "--user", "0", packageName)
-        if (enable.isSuccess || unsuspend.isSuccess) Result.success(Unit) else enable
+        runCommand("pm", "enable", packageName)
     }
 
     override fun isAppFrozen(packageName: String): Boolean {
         return try {
-            val info = packageManager.getApplicationInfo(packageName, 0)
-            if (!info.enabled) return true
-            // В режиме SUSPEND flag `enabled` остаётся true, но приложение всё равно
-            // «заморожено» с точки зрения пользователя — проверяем через isPackageSuspended.
-            return try {
-                packageManager.isPackageSuspended(packageName)
-            } catch (_: Exception) {
-                false
-            }
+            !packageManager.getApplicationInfo(packageName, 0).enabled
         } catch (e: PackageManager.NameNotFoundException) {
             false
         }
