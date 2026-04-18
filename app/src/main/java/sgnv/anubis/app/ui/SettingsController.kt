@@ -46,13 +46,44 @@ class SettingsController(
     )
     val auditDecoyWithBackground: StateFlow<Boolean> = _auditDecoyWithBackground
 
+    /**
+     * Экспериментальные функции: honeypot-listener, активный probe трафика,
+     * decoy-VPN. По умолчанию off — они создают нагрузку (bind 14 портов,
+     * shizuku-штормы), на Honor MagicOS могут триггернуть ANR.
+     * Включается вручную в Settings для опытных пользователей.
+     */
+    private val _devMode = MutableStateFlow(prefs.getBoolean(KEY_DEV_MODE, false))
+    val devMode: StateFlow<Boolean> = _devMode
+
     init {
         if (_backgroundMonitoring.value) VpnMonitorService.start(context)
         // AuditController.start в BootReceiver уже поднимет сервис при перезагрузке.
         // Здесь поднимаем при «холодном» старте app — если флаг был включён, но
         // сервис почему-то не жив (swipe recents, сбой Honor battery).
-        if (_auditBackground.value) AuditController.start(context, persistPreference = false)
+        // Под dev_mode: если пользователь выключил экспериментальные функции,
+        // но старый audit_background_enabled остался true — принудительно
+        // останавливаем, чтобы не молотил в фоне скрытно от пользователя.
+        if (_devMode.value && _auditBackground.value) {
+            AuditController.start(context, persistPreference = false)
+        } else if (!_devMode.value && _auditBackground.value) {
+            AuditController.stop(context, persistPreference = true)
+            _auditBackground.value = false
+        }
         refreshVpnClients()
+    }
+
+    fun setDevMode(enabled: Boolean) {
+        _devMode.value = enabled
+        prefs.edit().putBoolean(KEY_DEV_MODE, enabled).apply()
+        if (!enabled && _auditBackground.value) {
+            // выключили dev_mode → фоновый аудит сразу останавливается
+            AuditController.stop(context, persistPreference = true)
+            _auditBackground.value = false
+        }
+    }
+
+    private companion object {
+        const val KEY_DEV_MODE = "dev_mode_enabled"
     }
 
     fun refreshVpnClients() {

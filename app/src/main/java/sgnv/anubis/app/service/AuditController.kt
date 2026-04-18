@@ -22,6 +22,8 @@ object AuditController {
     private const val PREFS = "settings"
     const val PREF_BG_ENABLED = "audit_background_enabled"
     const val PREF_DECOY_WITH_BG = "audit_decoy_with_background"
+    /** Держим в синке с SettingsController.KEY_DEV_MODE. Статический gate — чтобы BootReceiver тоже уважал. */
+    const val PREF_DEV_MODE = "dev_mode_enabled"
 
     /**
      * Поднять фоновый аудит. Если [persistPreference] = true — записываем `audit_background_enabled`,
@@ -30,6 +32,10 @@ object AuditController {
      */
     fun start(context: Context, persistPreference: Boolean = true) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Dev-mode gate: honeypot-сервис стартует только если экспериментальные
+        // функции включены в Settings. Защищает от «залипшего» audit_background_enabled=true
+        // из прошлой версии, когда dev_mode ещё не существовал.
+        if (!prefs.getBoolean(PREF_DEV_MODE, false)) return
         if (persistPreference) {
             prefs.edit().putBoolean(PREF_BG_ENABLED, true).apply()
         }

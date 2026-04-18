@@ -313,12 +313,13 @@ fun HomeScreen(
             }
         }
 
-        // Аудит ловушек — карточка статуса. Показывается только когда сервис
-        // жив (фоновый аудит включён) или когда за сегодня уже были хиты
-        // (пользователь вернулся в Home и видит что за день кто-то шлёпнул).
+        // Аудит ловушек — карточка статуса. Показывается только в dev_mode
+        // и только когда сервис жив или за сегодня были хиты (чтобы не
+        // мозолить глаза в режиме idle).
+        val devMode by viewModel.devMode.collectAsState()
         val auditRunning by viewModel.auditServiceRunning.collectAsState()
         val auditHitsToday by viewModel.auditHitsToday.collectAsState()
-        if (auditRunning || auditHitsToday > 0) {
+        if (devMode && (auditRunning || auditHitsToday > 0)) {
             Spacer(Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { onOpenAudit() },

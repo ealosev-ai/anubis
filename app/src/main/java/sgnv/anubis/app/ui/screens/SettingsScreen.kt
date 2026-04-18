@@ -293,26 +293,45 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // Audit entry — honeypot VPN detectors
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onOpenAudit() }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Ловушки для сканеров", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Text(
-                        "Фоновый honeypot + список приложений, которые сканят ваш телефон",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        // Экспериментальные функции — dev mode toggle. Под ним прячутся
+        // honeypot-listener, активный probe, decoy-VPN — всё что может
+        // триггернуть ANR на Honor MagicOS и что не нужно обычному юзеру
+        // при уже расширенном списке DefaultRestrictedApps.
+        val devMode by viewModel.devMode.collectAsState()
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Экспериментальные функции",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            "Honeypot-ловушки, активный срез трафика, decoy-VPN. " +
+                                "Могут вызывать зависания на Honor/MagicOS — включайте если понимаете что делаете.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = devMode,
+                        onCheckedChange = { viewModel.setDevMode(it) },
                     )
                 }
-                Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (devMode) {
+                    Spacer(Modifier.height(12.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onOpenAudit,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Открыть экспериментальный аудит")
+                    }
+                }
             }
         }
 

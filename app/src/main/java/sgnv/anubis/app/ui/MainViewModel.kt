@@ -112,6 +112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val hitActionMode: StateFlow<String> = settingsController.hitActionMode
     val auditBackground: StateFlow<Boolean> = settingsController.auditBackground
     val auditDecoyWithBackground: StateFlow<Boolean> = settingsController.auditDecoyWithBackground
+    val devMode: StateFlow<Boolean> = settingsController.devMode
 
     /** Жив ли AuditForegroundService (для Home-карточки «Аудит активен»). */
     val auditServiceRunning: StateFlow<Boolean> = AuditForegroundService.running
@@ -352,6 +353,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setHitActionMode(mode: String) = settingsController.setHitActionMode(mode)
     fun setBackgroundMonitoring(enabled: Boolean) = settingsController.setBackgroundMonitoring(enabled)
+    fun setDevMode(enabled: Boolean) = settingsController.setDevMode(enabled)
     fun setAuditBackground(enabled: Boolean) = settingsController.setAuditBackground(enabled)
     fun setAuditDecoyWithBackground(enabled: Boolean) = settingsController.setAuditDecoyWithBackground(enabled)
 
