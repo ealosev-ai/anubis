@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import sgnv.anubis.app.AnubisApp
 import sgnv.anubis.app.audit.model.AuditSuspect
+import sgnv.anubis.app.data.model.AppGroup
+import sgnv.anubis.app.data.model.InstalledAppInfo
 import sgnv.anubis.app.service.StealthVpnService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -123,6 +125,75 @@ class AuditViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: PackageManager.NameNotFoundException) {
             packageName
         }
+    }
+
+    // ── Активный срез трафика ───────────────────────────────────────────
+
+    private val probe = AppTrafficProbe(app.shizukuManager)
+
+    /** Состояние среза — для UI. */
+    sealed class ProbeState {
+        data object Idle : ProbeState()
+        data class Running(
+            val packageName: String,
+            val label: String,
+            val elapsedSec: Int,
+            val totalSec: Int,
+            val foundSoFar: Int,
+        ) : ProbeState()
+        data class Done(
+            val packageName: String,
+            val label: String,
+            val endpoints: List<AppTrafficProbe.Endpoint>,
+        ) : ProbeState()
+        data class Error(val packageName: String, val message: String) : ProbeState()
+    }
+
+    private val _probeState = MutableStateFlow<ProbeState>(ProbeState.Idle)
+    val probeState: StateFlow<ProbeState> = _probeState
+
+    /** Кандидаты для среза — managed apps. Пустой список если ничего не выбрано. */
+    private val _probeCandidates = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
+    val probeCandidates: StateFlow<List<InstalledAppInfo>> = _probeCandidates
+
+    /** Обновить список кандидатов (вызывается при открытии секции). */
+    fun refreshProbeCandidates() {
+        viewModelScope.launch {
+            val all = app.appRepository.getInstalledApps()
+            // Показываем только managed — их пользователь уже отобрал как «интересные».
+            // Остальные 300 системных пакетов в dropdown'е бесполезны.
+            val managed = all.filter { it.group != null }.sortedBy { it.label.lowercase() }
+            _probeCandidates.value = managed
+        }
+    }
+
+    private var probeJob: Job? = null
+
+    fun runProbe(packageName: String, durationSec: Int = 15) {
+        // Отмена предыдущего среза — если пользователь кликнул по второму пакету
+        // не дожидаясь окончания первого. По идее UI не даст, но на всякий.
+        probeJob?.cancel()
+        val label = labelFor(packageName)
+        _probeState.value = ProbeState.Running(packageName, label, 0, durationSec, 0)
+        probeJob = viewModelScope.launch {
+            val result = probe.run(
+                context = getApplication(),
+                packageName = packageName,
+                durationSec = durationSec,
+                onTick = { elapsed, found ->
+                    _probeState.value = ProbeState.Running(packageName, label, elapsed, durationSec, found)
+                },
+            )
+            _probeState.value = result.fold(
+                onSuccess = { endpoints -> ProbeState.Done(packageName, label, endpoints) },
+                onFailure = { err -> ProbeState.Error(packageName, err.message ?: "сбой среза") },
+            )
+        }
+    }
+
+    fun clearProbe() {
+        probeJob?.cancel()
+        _probeState.value = ProbeState.Idle
     }
 
     override fun onCleared() {

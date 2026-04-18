@@ -29,6 +29,13 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -41,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.content.Intent
 import androidx.lifecycle.viewmodel.compose.viewModel
+import sgnv.anubis.app.audit.AppTrafficProbe
 import sgnv.anubis.app.audit.AuditViewModel
 import sgnv.anubis.app.audit.HoneypotDebug
 import sgnv.anubis.app.audit.HoneypotListener
@@ -323,6 +331,13 @@ fun AuditScreen(
             HitsHeatMap(hitsByHour)
             Spacer(Modifier.height(12.dp))
         }
+
+        // ── Активный срез трафика ─────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        LaunchedEffect(Unit) { auditViewModel.refreshProbeCandidates() }
+        TrafficProbeCard(auditViewModel)
+
+        Spacer(Modifier.height(16.dp))
 
         if (suspects.isEmpty()) {
             Text(
@@ -792,5 +807,251 @@ private fun SuspectCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Карточка «Срез трафика». Пассивный honeypot ловит только тех кто сам стучится
+ * в localhost — а банки чаще делают пробы в момент запуска и не на loopback.
+ * Здесь — активный срез: выбираем managed-пакет, через Shizuku force-stop +
+ * am start, N секунд пасём /proc/net/tcp[6]+udp[6], фильтруем по UID пакета,
+ * показываем уникальные remote endpoints. «Что Сбер делал в первые 15 секунд».
+ */
+@Composable
+private fun TrafficProbeCard(vm: AuditViewModel) {
+    val state by vm.probeState.collectAsState()
+    val candidates by vm.probeCandidates.collectAsState()
+    var showPicker by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                "Срез трафика приложения",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Запускает выбранное приложение и 15 секунд смотрит в /proc/net/tcp — " +
+                    "показывает куда оно реально ходит при старте. Ловит активное " +
+                    "сканирование и утечки мимо туннеля. Пассивные детекторы (спросил " +
+                    "ConnectivityManager и всё) — увидеть не сможем.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+
+            when (val s = state) {
+                is AuditViewModel.ProbeState.Idle -> {
+                    Button(
+                        onClick = { showPicker = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = candidates.isNotEmpty(),
+                    ) {
+                        Text(
+                            if (candidates.isEmpty()) "Нет managed-приложений"
+                            else "Выбрать приложение для среза",
+                        )
+                    }
+                    if (candidates.isEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Отметьте хотя бы одно приложение в AppList как LOCAL/VPN_ONLY/LAUNCH_VPN, чтобы выбрать его для среза.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                is AuditViewModel.ProbeState.Running -> {
+                    Text(
+                        "Снимаю срез: ${s.label}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { s.elapsedSec.toFloat() / s.totalSec.toFloat() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${s.elapsedSec}/${s.totalSec}с · найдено endpoint'ов: ${s.foundSoFar}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { vm.clearProbe() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Отменить") }
+                }
+                is AuditViewModel.ProbeState.Done -> {
+                    Text(
+                        "Срез: ${s.label}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Endpoint'ов найдено: ${s.endpoints.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (s.endpoints.isEmpty()) {
+                        Text(
+                            "Приложение не открыло ни одного коннекта за окно наблюдения. " +
+                                "Либо Application.onCreate отложен (WorkManager/JobScheduler), " +
+                                "либо всё через native NDK с sub-second handshake.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        // Сначала loopback — это самые интересные, если есть хоть один
+                        // → прямое доказательство что приложение пробует SOCKS5/Tor-порты.
+                        val (loopback, external) = s.endpoints.partition {
+                            it.remoteIp == "127.0.0.1" || it.remoteIp == "::1"
+                        }
+                        if (loopback.isNotEmpty()) {
+                            Text(
+                                "⚠ Коннекты на loopback (${loopback.size}):",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            for (ep in loopback) ProbeEndpointRow(ep, highlight = true)
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Text(
+                            "Внешние (${external.size}):",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        for (ep in external.take(40)) ProbeEndpointRow(ep, highlight = false)
+                        if (external.size > 40) {
+                            Text(
+                                "… и ещё ${external.size - 40}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { vm.runProbe(s.packageName) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Ещё раз") }
+                        OutlinedButton(
+                            onClick = { vm.clearProbe() },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Закрыть") }
+                    }
+                }
+                is AuditViewModel.ProbeState.Error -> {
+                    Text(
+                        "Ошибка среза: ${s.packageName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        s.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { vm.clearProbe() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Закрыть") }
+                }
+            }
+        }
+    }
+
+    if (showPicker) {
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Отмена") }
+            },
+            title = { Text("Выбрать приложение") },
+            text = {
+                // Высота ограничена, чтобы dialog не выпадал за экран.
+                LazyColumn(modifier = Modifier.fillMaxWidth().height(380.dp)) {
+                    items(candidates, key = { it.packageName }) { app ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showPicker = false
+                                    vm.runProbe(app.packageName)
+                                }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    app.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    app.packageName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                            }
+                            app.group?.let {
+                                Text(
+                                    it.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ProbeEndpointRow(ep: AppTrafficProbe.Endpoint, highlight: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "${ep.protocol}/${ep.state}",
+            style = MaterialTheme.typography.labelSmall,
+            fontFamily = FontFamily.Monospace,
+            color = if (highlight) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Text(
+            "${ep.remoteIp}:${ep.remotePort}",
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = if (highlight) FontWeight.Bold else FontWeight.Normal,
+            color = if (highlight) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "+${ep.firstSeenElapsedSec}с",
+            style = MaterialTheme.typography.labelSmall,
+            fontFamily = FontFamily.Monospace,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
