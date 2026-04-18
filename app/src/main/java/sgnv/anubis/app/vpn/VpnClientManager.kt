@@ -127,7 +127,7 @@ open class VpnClientManager(
         }
         // For custom clients: caller handles via force-stop
     }
-емис пропустил групировка прикольно но врядли пол
+
     open override fun launchApp(packageName: String) {
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
