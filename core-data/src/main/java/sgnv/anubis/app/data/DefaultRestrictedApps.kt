@@ -338,27 +338,21 @@ object DefaultRestrictedApps {
      * показывает пустое место и тихо страдает.
      */
     val neverRestrict = setOf(
-        // Приватные клавиатуры без облака (не шлют телеметрию, нет INTERNET permission).
-        "helium314.keyboard",               // HeliBoard (F-Droid)
-        "com.menny.android.anysoftkeyboard", // AnySoftKeyboard
-        "org.futo.inputmethod.latin",       // FUTO Keyboard (платная, keyboard.futo.org)
-        // Google Gboard — телеметрия есть, но через Firebase (не AppMetrica),
-        // и Google уже знает про твой VPN через Play Services. Держим как fallback
-        // IME, чтобы после заморозки Я.Клавы было чем печатать пока HeliBoard
-        // настраивается.
+        // Активные IME пользователя — не морозим, иначе не сможет печатать.
+        // Google Gboard: телеметрия есть, но через Firebase (не AppMetrica),
+        // банки этот канал не видят. Свайп у Gboard лучший из доступных.
         "com.google.android.inputmethod.latin",
         "com.google.android.inputmethod.pinyin",
-        // OEM IME — нужен как last-resort если Android откатится к стокому.
+        // FUTO Keyboard (платная, keyboard.futo.org) — ML on-device, без сети.
+        "org.futo.inputmethod.latin",
+        // OEM IME — last-resort fallback если Android при заморозке user-IME
+        // откатится к стоковому Honor/Huawei/Samsung keyboard'у.
         "com.hihonor.ims",                  // Honor Input
         "com.huawei.ims",                   // Huawei Input
         "com.samsung.android.honeyboard",   // Samsung Keyboard
-        // SwiftKey (Microsoft) — свой поток телеметрии. НЕ в AppMetrica,
-        // корреляция с RU-банками ниже. Оставляем доступной.
-        "com.touchtype.swiftkey",
         // Яндекс.Клавиатура (ru.yandex.androidkeyboard) НЕ в whitelist —
-        // сливает VPN-статус через AppMetrica тот же device_id что и Сбер/РСХБ.
-        // Прежде чем её замораживать, убедись что активен другой IME
-        // (HeliBoard/Gboard), иначе устройство останется без клавиатуры.
+        // сливает VPN-статус через AppMetrica (тот же device_id что знают
+        // Сбер/РСХБ/Газпромбанк). Не использовать.
     )
 
     fun isKnownRestricted(packageName: String): Boolean {
