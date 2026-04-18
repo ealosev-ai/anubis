@@ -176,18 +176,41 @@ class AuditViewModel(application: Application) : AndroidViewModel(application) {
         val label = labelFor(packageName)
         _probeState.value = ProbeState.Running(packageName, label, 0, durationSec, 0)
         probeJob = viewModelScope.launch {
-            val result = probe.run(
-                context = getApplication(),
-                packageName = packageName,
-                durationSec = durationSec,
-                onTick = { elapsed, found ->
-                    _probeState.value = ProbeState.Running(packageName, label, elapsed, durationSec, found)
-                },
-            )
-            _probeState.value = result.fold(
-                onSuccess = { endpoints -> ProbeState.Done(packageName, label, endpoints) },
-                onFailure = { err -> ProbeState.Error(packageName, err.message ?: "сбой среза") },
-            )
+            // Если приложение заморожено (pm disable-user или pm suspend) — ни
+            // `am start`, ни `monkey` не поднимут процесс (возвращают 1/252).
+            // Временно размораживаем на время среза, в `finally` возвращаем в
+            // исходное состояние. Пользователь не должен руками дёргать группы.
+            val shizuku = app.shizukuManager
+            val wasFrozen = shizuku.isAppFrozen(packageName)
+            if (wasFrozen) {
+                shizuku.unfreezeApp(packageName)
+                // Небольшая пауза — PackageManager кэширует enabled-state, без
+                // задержки следующий `am start` иногда видит старое значение.
+                kotlinx.coroutines.delay(400L)
+            }
+            try {
+                val result = probe.run(
+                    context = getApplication(),
+                    packageName = packageName,
+                    durationSec = durationSec,
+                    onTick = { elapsed, found ->
+                        _probeState.value = ProbeState.Running(packageName, label, elapsed, durationSec, found)
+                    },
+                )
+                _probeState.value = result.fold(
+                    onSuccess = { endpoints -> ProbeState.Done(packageName, label, endpoints) },
+                    onFailure = { err -> ProbeState.Error(packageName, err.message ?: "сбой среза") },
+                )
+            } finally {
+                // Возвращаем замороженное состояние вне зависимости от исхода —
+                // инвариант stealth важнее результата среза. Если пакет и был
+                // разморожен изначально, этот блок не сработает (wasFrozen=false).
+                if (wasFrozen) {
+                    // force-stop чтобы процесс, запущенный для среза, не остался висеть.
+                    shizuku.forceStopApp(packageName)
+                    shizuku.freezeApp(packageName)
+                }
+            }
         }
     }
 

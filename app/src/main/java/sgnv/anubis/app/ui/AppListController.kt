@@ -28,6 +28,7 @@ class AppListController(
     private val repository: AppRepository,
     private val shizuku: ShizukuManager,
     private val scope: CoroutineScope,
+    private val vpnActiveProvider: () -> Boolean,
 ) {
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps
@@ -57,9 +58,19 @@ class AppListController(
         }
     }
 
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError
+    fun clearError() { _lastError.value = null }
+
     fun cycleAppGroup(packageName: String) {
         scope.launch {
             repository.cycleGroup(packageName)
+            val newGroup = repository.getAppGroup(packageName)
+            // Не достаточно размораживать только при выходе из групп: переход
+            // LOCAL↔VPN_ONLY при активном/неактивном VPN тоже меняет желаемый
+            // freeze-state. Пример: VPN on, app в LOCAL (frozen). Тап →
+            // VPN_ONLY: по инварианту должен разморозиться.
+            syncFreezeStateFor(packageName, newGroup)
             _installedApps.value = repository.getInstalledApps()
             _localApps.value = repository.getAppsByGroup(AppGroup.LOCAL)
             _vpnOnlyApps.value = repository.getAppsByGroup(AppGroup.VPN_ONLY)
@@ -69,9 +80,48 @@ class AppListController(
 
     fun removeFromGroup(packageName: String) {
         scope.launch {
+            // Сначала разморозка, потом удаление — если сначала удалить, мы
+            // потеряем трек что приложение было заморожено.
+            syncFreezeStateFor(packageName, newGroup = null)
             repository.removeApp(packageName)
             loadInstalledApps()
             loadGroupedApps()
+        }
+    }
+
+    /**
+     * Привести реальный freeze-state пакета в соответствие с инвариантом stealth
+     * для (newGroup, vpnActive). Матрица:
+     *
+     * | Group       | VPN on   | VPN off  |
+     * |-------------|----------|----------|
+     * | LOCAL       | frozen   | unfrozen |
+     * | VPN_ONLY    | unfrozen | frozen   |
+     * | LAUNCH_VPN  | unfrozen | unfrozen |
+     * | null        | unfrozen | unfrozen |
+     *
+     * Если текущий state уже совпадает с желаемым — ничего не делаем. При
+     * ошибке freeze/unfreeze — пишем в lastError, чтобы UI не молчал.
+     */
+    private suspend fun syncFreezeStateFor(packageName: String, newGroup: AppGroup?) {
+        val vpnOn = vpnActiveProvider()
+        val shouldBeFrozen = when (newGroup) {
+            AppGroup.LOCAL -> vpnOn
+            AppGroup.VPN_ONLY -> !vpnOn
+            AppGroup.LAUNCH_VPN, null -> false
+        }
+        val isFrozen = shizuku.isAppFrozen(packageName)
+        if (isFrozen == shouldBeFrozen) return
+
+        val result = if (shouldBeFrozen) {
+            shizuku.freezeApp(packageName)
+        } else {
+            shizuku.unfreezeApp(packageName)
+        }
+        if (result.isFailure) {
+            val verb = if (shouldBeFrozen) "заморозить" else "разморозить"
+            _lastError.value = "Не удалось $verb $packageName: " +
+                (result.exceptionOrNull()?.message ?: "Shizuku недоступен")
         }
     }
 

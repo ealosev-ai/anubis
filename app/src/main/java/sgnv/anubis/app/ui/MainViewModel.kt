@@ -52,7 +52,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val orchestrator = app.orchestrator
 
     val stealthState: StateFlow<StealthState> = orchestrator.state
-    val lastError: StateFlow<String?> = orchestrator.lastError
     val vpnActive: StateFlow<Boolean> = vpnClientManager.vpnActive
     val activeVpnClient: StateFlow<VpnClientType?> = vpnClientManager.activeVpnClient
     val activeVpnPackage: StateFlow<String?> = vpnClientManager.activeVpnPackage
@@ -70,11 +69,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository = repository,
         shizuku = shizukuManager,
         scope = viewModelScope,
+        vpnActiveProvider = { vpnClientManager.vpnActive.value },
     )
     val installedApps: StateFlow<List<InstalledAppInfo>> = appListController.installedApps
     val localApps: StateFlow<List<ManagedApp>> = appListController.localApps
     val vpnOnlyApps: StateFlow<List<ManagedApp>> = appListController.vpnOnlyApps
     val launchVpnApps: StateFlow<List<ManagedApp>> = appListController.launchVpnApps
+
+    /**
+     * lastError собирает ошибки из двух источников — orchestrator (stealth
+     * операции) и appListController (freeze/unfreeze отдельных пакетов через
+     * список). UI читает один флоу и показывает первую не-null ошибку.
+     */
+    val lastError: StateFlow<String?> = kotlinx.coroutines.flow.combine(
+        orchestrator.lastError,
+        appListController.lastError,
+    ) { o, a -> o ?: a }.stateIn(
+        viewModelScope,
+        kotlinx.coroutines.flow.SharingStarted.Eagerly,
+        null,
+    )
+
+    fun clearError() {
+        orchestrator.clearError()
+        appListController.clearError()
+    }
 
     /**
      * Выбор VPN-клиента, режим заморозки, настройки monitoring/hit-action

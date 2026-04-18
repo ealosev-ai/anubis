@@ -219,7 +219,7 @@ class HoneypotListener(
             }
 
             val preview = if (packet.length > 0) {
-                packet.data.copyOf(minOf(packet.length, 32)).toHexPreview()
+                packet.data.copyOf(minOf(packet.length, 256)).toSmartPreview()
             } else null
 
             bumpDebug {
@@ -291,7 +291,7 @@ class HoneypotListener(
             val buf = ByteArray(2048)
             val n = input.read(buf)
             if (n > 0) {
-                preview = buf.copyOf(minOf(n, 32)).toHexPreview()
+                preview = buf.copyOf(minOf(n, 256)).toSmartPreview()
 
                 when {
                     // TLS ClientHello на голом порту (например банк идёт прямо
@@ -456,3 +456,20 @@ data class HoneypotDebug(
 
 private fun ByteArray.toHexPreview(): String =
     joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }
+
+/**
+ * HEX первых 32 байт + ASCII до 256. HTTP-запросы читаются глазами
+ * (видим Host/User-Agent), бинарь (TLS ClientHello) сохраняет hex
+ * для ручного разбора. 32-байтный hex оставлен для обратной совместимости
+ * с историческими записями в БД.
+ */
+private fun ByteArray.toSmartPreview(): String {
+    val hexPart = copyOf(minOf(size, 32)).toHexPreview()
+    val asciiPart = buildString(size) {
+        for (i in 0 until minOf(size, 256)) {
+            val c = this@toSmartPreview[i].toInt() and 0xFF
+            append(if (c in 0x20..0x7E) c.toChar() else '.')
+        }
+    }
+    return "$hexPart | $asciiPart"
+}

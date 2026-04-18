@@ -53,6 +53,7 @@ private val grayscaleFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setT
 @Composable
 fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val allApps by viewModel.installedApps.collectAsState()
+    val lastError by viewModel.lastError.collectAsState()
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     var showAutoWarning by remember { mutableStateOf(false) }
@@ -80,6 +81,29 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium
         )
+
+        // Плашка ошибок freeze/unfreeze — без неё молча остаётся enabled=3
+        // и иконка пропадает с лаунчера без видимой причины.
+        lastError?.let { error ->
+            Spacer(Modifier.height(8.dp))
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+            ) {
+                Row(
+                    Modifier.padding(12.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        error,
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    TextButton(onClick = { viewModel.clearError() }) { Text("OK") }
+                }
+            }
+        }
 
         Spacer(Modifier.height(8.dp))
 

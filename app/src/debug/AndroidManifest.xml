@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!--
+        Debug-only state dumper. Вызывается из adb:
+            am broadcast -a sgnv.anubis.app.debug.DUMP \
+              -n <applicationId>/sgnv.anubis.app.debug.DebugDumpReceiver
+        Затем:
+            run-as <applicationId> cat files/debug-dump.json
+        -->
+        <!--
+        exported=true потому что `am broadcast` от shell-uid приравнивается
+        к стороннему вызову, на non-exported receiver Android 14+ не доставит.
+        Debug-only, в release-сборку не попадает — стороннее ПО не опасно.
+        -->
+        <receiver
+            android:name="sgnv.anubis.app.debug.DebugDumpReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="sgnv.anubis.app.debug.DUMP" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
