@@ -22,3 +22,6 @@ signing.properties
 
 # Local files (session logs, specs, APK analysis, article drafts)
 /local
+/.claude
+/app_folders.md
+/gradle/gradle-daemon-jvm.properties
