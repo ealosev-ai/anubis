@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "updatedEpochMs": 1776568000000,
+  "version": 5,
+  "updatedEpochMs": 1776572000000,
   "updatedIso": "2026-04-18",
   "comment": "Список RU-приложений для авто-группировки в Anubis. LOCAL = палят VPN (freeze при VPN on). VPN_ONLY = требуют VPN (freeze при VPN off). neverRestrict = не морозим никогда (клавиатуры). Источник — github.com/ealosev-ai/anubis, обновляется напрямую в main-ветке без пересборки APK.",
   "restricted": [
@@ -60,7 +60,7 @@
         "com.ladygentleman.app",
         "ru.vkusvill", "ru.vkusvill.android", "ru.winelab",
         "ru.letu", "ru.sportmaster.app", "ru.sunlight.sunlight", "ru.sokolov.android",
-        "ru.zolotoy585.customer", "com.johnjolie",
+        "ru.zolotoy585.customer", "com.johnjolie", "com.loyaltyplant.partner.frankbybasta",
         "ru.hoff.app", "ru.askonaapp.android",
         "ru.mvideo.mobile", "ru.filit.mvideo.b2c", "ru.dns.shop.android", "ru.dns_shop.new",
         "ru.citilink", "ru.citilink.mobileapp", "ru.onlinetrade.app", "ru.autodoc.autodocapp"
@@ -81,7 +81,7 @@
       "packages": [
         "ru.foodfox.client", "ru.yandex.eda", "com.deliveryclub", "ru.samokat.mobile",
         "ru.dodopizza.app", "ru.kfc.kfc_delivery", "ru.burgerking",
-        "com.apegroup.mcdonaldsrussia", "pro.tdnm.gurmanica"
+        "com.apegroup.mcdonaldsrussia", "pro.tdnm.gurmanica", "com.flowwow"
       ]
     },
     {
@@ -117,7 +117,8 @@
       "label": "Транспорт / шеринг",
       "packages": [
         "com.punicapp.whoosh", "ru.urentbike.app", "com.citymobil.android",
-        "ru.belkacar.belkacar", "youdrive.today", "com.delimobil.carsharing",
+        "ru.belkacar.belkacar", "youdrive.today",
+        "com.carshering", "com.delimobil.carsharing",
         "by.advasoft.android.troika.app"
       ]
     },
@@ -166,7 +167,7 @@
         "ru.obshchinaru.obshchina", "ru.palich.android", "ru.briz.rendezvous", "com.setka",
         "com.sdkit.gigaapp.app", "com.sdkit.search.app",
         "info.goodline.events", "ru.pikabu.android",
-        "com.rosdomofon.rdua", "com.yclients.mobile.g76422"
+        "com.rosdomofon.rdua", "com.yclients.mobile.g76422", "com.drive2"
       ]
     }
   ],

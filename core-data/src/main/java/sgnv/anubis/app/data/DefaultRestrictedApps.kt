@@ -152,6 +152,7 @@ object DefaultRestrictedApps {
         "ru.sokolov.android",
         "ru.zolotoy585.customer",       // 585 Золотой
         "com.johnjolie",                // Джон Джоли (ювелирка)
+        "com.loyaltyplant.partner.frankbybasta", // Frank by Basta (магазин Басты)
         // DIY / мебель / электроника
         "ru.hoff.app",                  // Хофф
         "ru.askonaapp.android",         // Аскона
@@ -190,6 +191,7 @@ object DefaultRestrictedApps {
         "ru.burgerking",                // Burger King
         "com.apegroup.mcdonaldsrussia", // Вкусно и точка (бывший McDonald's)
         "pro.tdnm.gurmanica",           // Гурманика (сеть кафе)
+        "com.flowwow",                  // FlowWow (доставка цветов)
     )
 
     /** Соцсети, мессенджеры RU, почта, знакомства. */
@@ -242,7 +244,8 @@ object DefaultRestrictedApps {
         "com.citymobil.android",
         "ru.belkacar.belkacar",         // BelkaCar
         "youdrive.today",               // Ситидрайв (бывший YouDrive, Сбер)
-        "com.delimobil.carsharing",     // Делимобиль (стандартный id)
+        "com.carshering",               // Делимобиль (у них так в id, опечатка на их стороне)
+        "com.delimobil.carsharing",     // Делимобиль (альтернативный id на всякий случай)
         "by.advasoft.android.troika.app", // Тройка (Moscow transit NFC)
     )
 
@@ -322,6 +325,7 @@ object DefaultRestrictedApps {
         "ru.pikabu.android",                // Pikabu (трекеры + RU-IP)
         "com.rosdomofon.rdua",              // Росдомофон (гео+дверь в квартиру)
         "com.yclients.mobile.g76422",       // Раздевалка (YClients-tenant: фитнес/салон)
+        "com.drive2",                       // Drive2 (автомобильный форум, тяжёлый трекинг)
     )
 
     /**
