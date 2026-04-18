@@ -124,8 +124,10 @@ object DefaultRestrictedApps {
         "ru.megamarket.marketplace",
         "com.avito.android",
         "ru.lamoda.main",
+        "com.lamoda.lite",              // Lamoda Lite (облегчённая версия)
         "ru.sbcs.store",                // СберМаркет / Купер
         "ru.instamart",                 // Купер (бывший Instamart)
+        "ru.aliexpress.buyer",          // AliExpress (китайский, много трекеров)
         // Универсамы / продукты
         "ru.lenta.lentochka",
         "ru.globus.app",
@@ -136,6 +138,7 @@ object DefaultRestrictedApps {
         "ru.myspar",
         "ru.pyaterochka.app.browser",   // Пятёрочка
         "club.chizhik",                 // Чижик (X5 discount)
+        "com.ru.dixy",                  // Дикси
         "ru.vkusvill",
         "ru.vkusvill.android",
         "ru.winelab",
@@ -168,6 +171,7 @@ object DefaultRestrictedApps {
         "ru.zdravcity.app",
         "ru.smclinic.app.lk",           // СМ-Клиника
         "ru.smclinic.lk_android",
+        "com.platfomni.gorzdrav",       // ГорЗдрав (сеть аптек Москва/Питер)
         "com.programmisty.emiasapp",    // ЕМИАС ИНФО (третья-сторонний клиент ЕМИАС)
     )
 
@@ -180,6 +184,7 @@ object DefaultRestrictedApps {
         "ru.dodopizza.app",             // Додо
         "ru.kfc.kfc_delivery",          // KFC
         "ru.burgerking",                // Burger King
+        "com.apegroup.mcdonaldsrussia", // Вкусно и точка (бывший McDonald's)
     )
 
     /** Соцсети, мессенджеры RU, почта, знакомства. */
@@ -268,6 +273,7 @@ object DefaultRestrictedApps {
     val fuel = setOf(
         "ru.pichesky.rosneft",              // Роснефть
         "ru.serebryakovas.lukoilmobileapp", // Лукойл
+        "com.gpn.azs",                      // Газпромнефть АЗС
     )
 
     /** Страхование. */

@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "updatedEpochMs": 1776540000000,
+  "version": 2,
+  "updatedEpochMs": 1776554000000,
   "updatedIso": "2026-04-18",
   "comment": "Список RU-приложений для авто-группировки в Anubis. LOCAL = палят VPN (freeze при VPN on). VPN_ONLY = требуют VPN (freeze при VPN off). neverRestrict = не морозим никогда (клавиатуры). Источник — github.com/ealosev-ai/anubis, обновляется напрямую в main-ветке без пересборки APK.",
   "restricted": [
@@ -49,11 +49,13 @@
       "label": "Маркетплейсы и магазины",
       "packages": [
         "com.wildberries.ru", "ru.ozon.app.android", "ru.ozon.select", "ru.beru.android",
-        "ru.megamarket.marketplace", "com.avito.android", "ru.lamoda.main",
-        "ru.sbcs.store", "ru.instamart",
+        "ru.megamarket.marketplace", "com.avito.android",
+        "ru.lamoda.main", "com.lamoda.lite",
+        "ru.sbcs.store", "ru.instamart", "ru.aliexpress.buyer",
         "ru.lenta.lentochka", "ru.globus.app", "ru.myauchan.droid", "ru.reksoft.okey",
         "ru.perekrestok.app", "ru.tander.magnit", "ru.myspar",
-        "ru.pyaterochka.app.browser", "club.chizhik", "ru.vkusvill", "ru.vkusvill.android", "ru.winelab",
+        "ru.pyaterochka.app.browser", "club.chizhik", "com.ru.dixy",
+        "ru.vkusvill", "ru.vkusvill.android", "ru.winelab",
         "ru.letu", "ru.sportmaster.app", "ru.sunlight.sunlight", "ru.sokolov.android", "ru.zolotoy585.customer",
         "ru.hoff.app", "ru.askonaapp.android",
         "ru.mvideo.mobile", "ru.filit.mvideo.b2c", "ru.dns.shop.android", "ru.dns_shop.new",
@@ -66,7 +68,7 @@
       "packages": [
         "ru.apteka", "ru.getpharma.eapteka", "ru.neopharm.stolichki", "ru.uteka.app",
         "ru.zdravcity.app", "ru.smclinic.app.lk", "ru.smclinic.lk_android",
-        "com.programmisty.emiasapp"
+        "com.platfomni.gorzdrav", "com.programmisty.emiasapp"
       ]
     },
     {
@@ -74,7 +76,8 @@
       "label": "Доставка / фастфуд",
       "packages": [
         "ru.foodfox.client", "ru.yandex.eda", "com.deliveryclub", "ru.samokat.mobile",
-        "ru.dodopizza.app", "ru.kfc.kfc_delivery", "ru.burgerking"
+        "ru.dodopizza.app", "ru.kfc.kfc_delivery", "ru.burgerking",
+        "com.apegroup.mcdonaldsrussia"
       ]
     },
     {
@@ -124,7 +127,7 @@
       "id": "fuel",
       "label": "АЗС",
       "packages": [
-        "ru.pichesky.rosneft", "ru.serebryakovas.lukoilmobileapp"
+        "ru.pichesky.rosneft", "ru.serebryakovas.lukoilmobileapp", "com.gpn.azs"
       ]
     },
     {
