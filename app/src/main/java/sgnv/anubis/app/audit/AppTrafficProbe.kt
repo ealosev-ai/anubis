@@ -82,15 +82,40 @@ class AppTrafficProbe(
     }
 
     private suspend fun launchPackage(context: Context, packageName: String): Result<Unit> {
-        val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-        val cmp = intent?.component
-        return if (cmp != null) {
-            shell.execCommand("am", "start", "-n", "${cmp.packageName}/${cmp.className}")
-        } else {
-            // Fallback: monkey сам найдёт launcher-категорию. Не идеал — он
-            // шлёт один "клик", но нам важно чтобы Application.onCreate запустился.
-            shell.execCommand("monkey", "-p", packageName, "-c", "android.intent.category.LAUNCHER", "1")
+        // 1) Быстрый путь — наш собственный PackageManager. Точный компонент,
+        //    одна IPC. Может вернуть null / stub ".DefaultActivity" если
+        //    пакет только что разморожен и PM-кэш нашего процесса ещё не
+        //    догнал system-state.
+        context.packageManager.getLaunchIntentForPackage(packageName)?.component?.let { cmp ->
+            val r = shell.execCommand("am", "start", "-n", "${cmp.packageName}/${cmp.className}")
+            if (r.isSuccess) return r
         }
+
+        // 2) Надёжный путь — Shizuku-shell system-uid видит актуальный PM.
+        //    `cmd package resolve-activity --brief` печатает две строки:
+        //      priority=0 preferredOrder=0 ...
+        //      com.example.foo/.MainActivity
+        //    берём последнюю непустую и `am start -n`.
+        val resolved = shell.runShell(
+            "cmd", "package", "resolve-activity", "--brief",
+            "-a", "android.intent.action.MAIN",
+            "-c", "android.intent.category.LAUNCHER",
+            packageName,
+        )
+        val component = resolved
+            ?.takeUnless { it.startsWith("ERROR:") }
+            ?.lineSequence()
+            ?.map { it.trim() }
+            ?.lastOrNull { it.contains('/') && it.startsWith(packageName) }
+        if (component != null) {
+            val r = shell.execCommand("am", "start", "-n", component)
+            if (r.isSuccess) return r
+        }
+
+        // 3) Последний эшелон — monkey. Он не точный (посылает клик по
+        //    launcher-иконке), но работает даже когда `resolve-activity`
+        //    молчит на каких-нибудь Huawei-форках PM.
+        return shell.execCommand("monkey", "-p", packageName, "-c", "android.intent.category.LAUNCHER", "1")
     }
 
     private suspend fun snapshot(targetUid: Int, elapsedSec: Int): List<Endpoint> {
