@@ -199,7 +199,11 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     }
 
     if (showAutoWarning) {
+        val list = viewModel.restrictedListProvider.current()
         AutoSelectCategoriesDialog(
+            list = list,
+            lastSyncMs = viewModel.restrictedListProvider.lastSyncMs(),
+            onSync = { viewModel.syncRestrictedList() },
             onDismiss = { showAutoWarning = false },
             onApply = { restrictedPkgs, restrictedPrefs, vpnOnlyPkgs ->
                 prefs.edit().putBoolean("seen_auto_warning", true).apply()
@@ -219,26 +223,21 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
  */
 @Composable
 private fun AutoSelectCategoriesDialog(
+    list: sgnv.anubis.app.data.RestrictedList,
+    lastSyncMs: Long,
+    onSync: () -> Unit,
     onDismiss: () -> Unit,
     onApply: (restrictedPkgs: Set<String>, restrictedPrefixes: List<String>, vpnOnlyPkgs: Set<String>) -> Unit,
 ) {
-    // Default = всё отмечено. User снимает что не хочет.
-    val restrictedChecks = remember {
-        mutableStateOf(
-            sgnv.anubis.app.data.DefaultRestrictedApps.categories
-                .associate { it.id to true }
-                .toMutableMap()
-        )
+    val restrictedChecks = remember(list) {
+        mutableStateOf(list.restricted.associate { it.id to true }.toMutableMap())
     }
-    val vpnOnlyChecks = remember {
-        mutableStateOf(
-            sgnv.anubis.app.data.DefaultVpnOnlyApps.categories
-                .associate { it.id to true }
-                .toMutableMap()
-        )
+    val vpnOnlyChecks = remember(list) {
+        mutableStateOf(list.vpnOnly.associate { it.id to true }.toMutableMap())
     }
-
     val includePrefixes: Boolean = restrictedChecks.value["yandex"] == true
+    val syncLabel = if (lastSyncMs == 0L) "список встроенный"
+        else "обновлён ${relativeTime(lastSyncMs)}"
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -254,7 +253,20 @@ private fun AutoSelectCategoriesDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            syncLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onSync) { Text("Обновить") }
+                    }
+                    Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
                             restrictedChecks.value = restrictedChecks.value.mapValues { true }.toMutableMap()
@@ -273,7 +285,7 @@ private fun AutoSelectCategoriesDialog(
                     )
                     Spacer(Modifier.height(4.dp))
                 }
-                items(sgnv.anubis.app.data.DefaultRestrictedApps.categories) { cat ->
+                items(list.restricted) { cat ->
                     CategoryCheckbox(
                         label = cat.label,
                         count = cat.packages.size,
@@ -294,7 +306,7 @@ private fun AutoSelectCategoriesDialog(
                     )
                     Spacer(Modifier.height(4.dp))
                 }
-                items(sgnv.anubis.app.data.DefaultVpnOnlyApps.categories) { cat ->
+                items(list.vpnOnly) { cat ->
                     CategoryCheckbox(
                         label = cat.label,
                         count = cat.packages.size,
@@ -310,15 +322,12 @@ private fun AutoSelectCategoriesDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val restrictedPkgs = sgnv.anubis.app.data.DefaultRestrictedApps.categories
+                val restrictedPkgs = list.restricted
                     .filter { restrictedChecks.value[it.id] == true }
                     .flatMap { it.packages }
                     .toSet()
-                val restrictedPrefs = if (includePrefixes)
-                    sgnv.anubis.app.data.DefaultRestrictedApps.prefixPatterns
-                else
-                    emptyList()
-                val vpnOnlyPkgs = sgnv.anubis.app.data.DefaultVpnOnlyApps.categories
+                val restrictedPrefs = if (includePrefixes) list.prefixPatterns else emptyList()
+                val vpnOnlyPkgs = list.vpnOnly
                     .filter { vpnOnlyChecks.value[it.id] == true }
                     .flatMap { it.packages }
                     .toSet()
@@ -329,6 +338,20 @@ private fun AutoSelectCategoriesDialog(
             TextButton(onClick = onDismiss) { Text("Отмена") }
         },
     )
+}
+
+private fun relativeTime(ms: Long): String {
+    val delta = System.currentTimeMillis() - ms
+    val minutes = delta / 60_000L
+    val hours = delta / 3_600_000L
+    val days = delta / (24 * 3_600_000L)
+    return when {
+        delta < 60_000L -> "только что"
+        minutes < 60 -> "$minutes мин назад"
+        hours < 24 -> "$hours ч назад"
+        days < 30 -> "$days дн назад"
+        else -> "давно"
+    }
 }
 
 @Composable

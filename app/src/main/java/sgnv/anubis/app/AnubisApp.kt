@@ -14,6 +14,7 @@ import sgnv.anubis.app.audit.AndroidPackageResolver
 import sgnv.anubis.app.audit.AuditRepository
 import sgnv.anubis.app.audit.HitNotifier
 import sgnv.anubis.app.audit.HoneypotListener
+import sgnv.anubis.app.data.RestrictedListProvider
 import sgnv.anubis.app.data.db.AppDatabase
 import sgnv.anubis.app.data.repository.AppRepository
 import sgnv.anubis.app.service.StealthOrchestrator
@@ -42,6 +43,7 @@ open class AnubisApp : Application() {
      * один инстанс, мониторинг VPN поднимается один раз в onCreate.
      */
     val appRepository: AppRepository by lazy { AppRepository(database.managedAppDao(), this) }
+    val restrictedListProvider: RestrictedListProvider by lazy { RestrictedListProvider(this) }
     val vpnClientManager: VpnClientManager by lazy { createVpnClientManager() }
     val orchestrator: StealthOrchestrator by lazy {
         StealthOrchestrator(this, shizukuManager, vpnClientManager, appRepository)
@@ -83,6 +85,19 @@ open class AnubisApp : Application() {
 
         startRuntimeMonitoring()
         checkAuditWatchdog(getSharedPreferences("settings", MODE_PRIVATE))
+        scheduleRestrictedListSync()
+    }
+
+    /**
+     * Проверить не устарел ли restricted-список. Если с последнего sync'а
+     * прошло > 24ч — дёргаем raw.githubusercontent.com за свежей версией.
+     * Ошибка сети безобидна: продолжаем с кешем или built-in fallback.
+     */
+    private fun scheduleRestrictedListSync() {
+        val lastSync = restrictedListProvider.lastSyncMs()
+        val stale = System.currentTimeMillis() - lastSync > RestrictedListProvider.SYNC_TTL_MS
+        if (!stale) return
+        applicationScope.launch { restrictedListProvider.sync() }
     }
 
     /**

@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "updatedEpochMs": 1776540000000,
+  "updatedIso": "2026-04-18",
+  "comment": "Список RU-приложений для авто-группировки в Anubis. LOCAL = палят VPN (freeze при VPN on). VPN_ONLY = требуют VPN (freeze при VPN off). neverRestrict = не морозим никогда (клавиатуры). Источник — github.com/ealosev-ai/anubis, обновляется напрямую в main-ветке без пересборки APK.",
+  "restricted": [
+    {
+      "id": "banks",
+      "label": "Банки и финтех",
+      "packages": [
+        "ru.sberbankmobile", "ru.sberbank.sberbankid", "ru.sberbank.sbbol", "ru.sber.telecom",
+        "ru.vtb24.mobilebanking.android", "ru.vtb.vtbinvestments",
+        "ru.alfabank.mobile.android", "ru.alfadirect.client",
+        "ru.tinkoff.investing", "ru.tcsbank.android", "com.idamob.tinkoff.android",
+        "ru.tbank.mobile", "ru.tinkoff.bnpl",
+        "ru.gazprombank.android.mobilebank.app",
+        "ru.rshb.dbo",
+        "ru.sovcombank.app", "ru.sovcombank.dms", "ru.sovcomcard.halva.v1",
+        "ru.mkb.mobile", "ru.psb.ifl", "ru.pochtabank.android",
+        "ru.raiffeisen.mobile.new", "ru.openbank.mobile", "ru.rosbank.android",
+        "com.akbars.mw", "ru.bankuralsib.mb.android",
+        "ru.cardsmobile.mw3"
+      ]
+    },
+    {
+      "id": "gov",
+      "label": "Госуслуги / муниципалы",
+      "packages": [
+        "ru.gosuslugi.pos", "ru.gosuslugi.zkh", "ru.gosuslugi.auto", "ru.gosuslugi.goskey",
+        "ru.mos.app", "ru.mos.polls", "ru.mos.myid", "ru.altarix.mos.pgu",
+        "ru.mosgorpass", "ru.mosoblgaz", "ru.mosparking.appnew", "ru.spb.parking",
+        "ru.fns.mytaxes", "ru.fns.lkfl", "ru.fns.billy", "com.gnivts.selfemployed",
+        "ru.emias.smart",
+        "ru.russianhighways.mobile",
+        "com.octopod.russianpost.client.android", "ru.rzd.pass", "ru.tutu.etrains",
+        "ru.nspk.mirpay", "ru.nspk.sbpay"
+      ]
+    },
+    {
+      "id": "telecom",
+      "label": "Связь",
+      "packages": [
+        "ru.mts.mymts", "ru.megafon.mlk", "ru.beeline.services", "com.tele2.mytele2",
+        "ru.yota.android", "ru.rt.smarthome", "ru.rostel", "ru.rostel.max"
+      ]
+    },
+    {
+      "id": "marketplaces",
+      "label": "Маркетплейсы и магазины",
+      "packages": [
+        "com.wildberries.ru", "ru.ozon.app.android", "ru.ozon.select", "ru.beru.android",
+        "ru.megamarket.marketplace", "com.avito.android", "ru.lamoda.main",
+        "ru.sbcs.store", "ru.instamart",
+        "ru.lenta.lentochka", "ru.globus.app", "ru.myauchan.droid", "ru.reksoft.okey",
+        "ru.perekrestok.app", "ru.tander.magnit", "ru.myspar",
+        "ru.pyaterochka.app.browser", "club.chizhik", "ru.vkusvill", "ru.vkusvill.android", "ru.winelab",
+        "ru.letu", "ru.sportmaster.app", "ru.sunlight.sunlight", "ru.sokolov.android", "ru.zolotoy585.customer",
+        "ru.hoff.app", "ru.askonaapp.android",
+        "ru.mvideo.mobile", "ru.filit.mvideo.b2c", "ru.dns.shop.android", "ru.dns_shop.new",
+        "ru.citilink", "ru.citilink.mobileapp", "ru.onlinetrade.app", "ru.autodoc.autodocapp"
+      ]
+    },
+    {
+      "id": "healthcare",
+      "label": "Аптеки и клиники",
+      "packages": [
+        "ru.apteka", "ru.getpharma.eapteka", "ru.neopharm.stolichki", "ru.uteka.app",
+        "ru.zdravcity.app", "ru.smclinic.app.lk", "ru.smclinic.lk_android",
+        "com.programmisty.emiasapp"
+      ]
+    },
+    {
+      "id": "delivery",
+      "label": "Доставка / фастфуд",
+      "packages": [
+        "ru.foodfox.client", "ru.yandex.eda", "com.deliveryclub", "ru.samokat.mobile",
+        "ru.dodopizza.app", "ru.kfc.kfc_delivery", "ru.burgerking"
+      ]
+    },
+    {
+      "id": "social",
+      "label": "Соцсети и почта",
+      "packages": [
+        "com.vkontakte.android", "com.vk.im", "com.vk.vkvideo", "com.vk.love",
+        "com.uma.musicvk", "ru.vk.store", "ru.ok.android",
+        "ru.oneme.app", "ru.oneme.max", "com.oneme.max",
+        "ru.mail.mailapp", "ru.mail.cloud", "ru.dahl.messenger"
+      ]
+    },
+    {
+      "id": "media",
+      "label": "Медиа и стриминг (RU)",
+      "packages": [
+        "ru.rutube.app", "ru.ivi.client", "ru.okko.tv", "ru.mts.mtstv",
+        "ru.rt.video.app.mobile", "ru.more.play", "ru.mobileup.channelone",
+        "ru.start.androidmobile", "ru.litres.android", "ru.plus.bookmate",
+        "com.zvooq.openplay"
+      ]
+    },
+    {
+      "id": "transport",
+      "label": "Транспорт / шеринг",
+      "packages": [
+        "com.punicapp.whoosh", "ru.urentbike.app", "com.citymobil.android",
+        "ru.belkacar.belkacar", "youdrive.today"
+      ]
+    },
+    {
+      "id": "yandex",
+      "label": "Яндекс",
+      "packages": [
+        "com.yandex.browser", "com.yandex.searchplugin", "com.yandex.searchapp",
+        "com.yandex.aliceapp", "com.yandex.mail", "com.yandex.lavka", "com.yandex.yamb",
+        "com.yandex.plus.home", "com.yandex.bank", "com.yandex.iot", "com.yandex.mobile.drive",
+        "com.yandex.shedevrus",
+        "ru.yandex.disk", "ru.yandex.market", "ru.yandex.taxi", "ru.yandex.music",
+        "ru.yandex.yandexmaps", "ru.yandex.yandexnavi", "ru.yandex.metro", "ru.yandex.realty",
+        "ru.yandex.mobile.afisha", "ru.yandex.mobile.gasstations", "ru.yandex.travel",
+        "ru.yandex.translate", "ru.yandex.weatherplugin", "ru.yandex.androidkeyboard",
+        "ru.yandex.key", "ru.kinopoisk", "ru.zen.android"
+      ]
+    },
+    {
+      "id": "fuel",
+      "label": "АЗС",
+      "packages": [
+        "ru.pichesky.rosneft", "ru.serebryakovas.lukoilmobileapp"
+      ]
+    },
+    {
+      "id": "insurance",
+      "label": "Страхование",
+      "packages": [
+        "ru.alfastrah.app", "ru.ingos.ingomobile", "ru.ingos.mobile.insurance", "ru.reso.client"
+      ]
+    },
+    {
+      "id": "classifieds",
+      "label": "Объявления",
+      "packages": [
+        "com.cian.main", "ru.auto.ara"
+      ]
+    },
+    {
+      "id": "other",
+      "label": "Прочее",
+      "packages": [
+        "ru.hh.android", "ru.polypay.otk", "ru.dublgis.dgismobile", "ru.afisha.android",
+        "ru.chitaigorod.mobile", "ru.moremania.techboss", "ru.webinar.mobile",
+        "ru.obshchinaru.obshchina", "ru.palich.android", "ru.briz.rendezvous", "com.setka"
+      ]
+    }
+  ],
+  "prefixPatterns": ["com.yandex.", "ru.yandex."],
+  "vpnOnly": [
+    {
+      "id": "google",
+      "label": "Google-сервисы",
+      "packages": [
+        "com.google.android.youtube", "com.google.android.apps.youtube.music",
+        "com.google.android.apps.youtube.kids"
+      ]
+    },
+    {
+      "id": "meta",
+      "label": "Meta (Instagram / Facebook)",
+      "packages": [
+        "com.instagram.android", "com.instagram.threadsapp", "com.facebook.katana",
+        "com.facebook.lite", "com.facebook.orca"
+      ]
+    },
+    {
+      "id": "twitter",
+      "label": "X / Twitter",
+      "packages": ["com.twitter.android", "com.twitter.android.lite"]
+    },
+    {
+      "id": "streaming",
+      "label": "Стриминг",
+      "packages": [
+        "com.spotify.music", "com.netflix.mediaclient", "com.amazon.avod.thirdpartyclient",
+        "com.hbo.hbonow", "com.disney.disneyplus"
+      ]
+    },
+    {
+      "id": "professional",
+      "label": "Профессиональные",
+      "packages": ["com.linkedin.android"]
+    },
+    {
+      "id": "chat",
+      "label": "Чаты и форумы",
+      "packages": [
+        "com.discord", "com.reddit.frontpage",
+        "org.telegram.messenger", "org.telegram.plus", "org.thunderdog.challegram",
+        "org.telegram.messenger.web", "org.thoughtcrime.securesms"
+      ]
+    },
+    {
+      "id": "ai",
+      "label": "AI-чатботы",
+      "packages": [
+        "com.openai.chatgpt", "com.anthropic.claude",
+        "com.google.android.apps.bard", "com.perplexity.app.android"
+      ]
+    }
+  ],
+  "neverRestrict": [
+    "com.google.android.inputmethod.latin",
+    "com.google.android.inputmethod.pinyin",
+    "org.futo.inputmethod.latin",
+    "com.hihonor.ims",
+    "com.huawei.ims",
+    "com.samsung.android.honeyboard"
+  ]
+}
