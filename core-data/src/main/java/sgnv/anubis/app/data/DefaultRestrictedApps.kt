@@ -1,199 +1,298 @@
 package sgnv.anubis.app.data
 
 /**
- * Куратируемый список RU-приложений, которые пользователь чаще всего хочет
- * изолировать от VPN-трафика. Используется кнопкой «Авто-выбор» в AppListScreen
- * и first-run seed'ом в AppRepository.
+ * Куратируемый список RU-приложений для автоматической группировки в LOCAL
+ * («палят VPN»). Используется кнопкой «Авто-выбор» в AppListScreen и first-run
+ * seed'ом в AppRepository.
  *
- * Критерии включения:
- *  - Банки / финтех / платежи — по методичке Минцифры стучатся в локальные
- *    SOCKS5-порты и проверяют `tun0` через ConnectivityManager. Sber на Exodus
- *    Privacy — 5 трекеров (AppMetrica, AppsFlyer, Firebase, CrashLytics, HMS).
- *    RSHB (ru.rshb.dbo) — подтверждённый хит нашего honeypot 2026-04-16.
- *  - Госуслуги и смежные — тот же pipeline, явно следуют методичке.
- *  - Маркетплейсы с платёжной частью (WB Pay, Ozon Pay и т.п.).
- *  - Медиа / стриминг с RU-only контентом (Okko, Wink, IVI, Premier) —
- *    палят VPN чтобы отказать в воспроизведении при зарубежном IP.
- *  - Яндекс / VK / OK — большие трекинговые экосистемы.
- *  - Telecom — сливают всё подряд, включая геолокацию.
+ * Философия: **"лучше перестраховаться"**. Мы точно не знаем, какие приложения
+ * активно сканят 127.0.0.1 в поисках SOCKS5 — это чёрный ящик с обратной
+ * стороны APK. Но точно знаем что:
+ *  - банки, гос, платежи → по методичке Минцифры сканят (RSHB подтверждён honeypot'ом)
+ *  - RU-маркетплейсы и лоялки → сливают геолокацию и могут триггерить на non-RU IP
+ *  - RU-стриминг → проверяют RU-IP для доступа к контенту
+ *  - Yandex/VK-экосистема → большие трекинговые контуры
  *
- * Не включаем:
- *  - Мессенджеры (Telegram/WhatsApp/Viber) — пользователь часто хочет их через VPN.
- *  - Иностранные стриминги (Netflix/YouTube/Spotify) — пользователь через VPN и так.
- *  - Игры — редкая категория для VPN-контроля.
- *  - Браузеры (кроме Yandex Browser, который трекает).
+ * False-positive (freeze безобидного приложения) стоит копейки — иконка
+ * пропадает с рабочего стола. False-negative (не заморозили сканера) = VPN
+ * спалился. Поэтому когда сомнения — добавляем.
  *
- * При расширении — добавлять в правильную категорию [Category], не в общий
- * набор. UI использует категории для кнопок «Только банки» / «Банки + гос» / «Всё».
+ * Не включаем только:
+ *  - мессенджеры общего назначения (Telegram/WhatsApp/Viber — юзер их через VPN)
+ *  - иностранные (они в [DefaultVpnOnlyApps])
+ *  - игры и developer-утилиты (4pda, Pikabu — не сливают критичного)
+ *  - VPN-клиенты (они запускаются ДО группы)
  */
 object DefaultRestrictedApps {
 
-    /**
-     * Банки, инвестиции, BNPL. Ядро целевой аудитории — именно из-за них
-     * вся эта история и существует. Все пакеты подтверждены на GitHub-issues
-     * Anubis/YourVPNDead или на форуме 4pda как известные VPN-детекторы.
-     */
+    /** Банки, инвестиции, BNPL, банк-карты, карты лояльности с платёжной частью. */
     val banks = setOf(
-        "ru.sberbankmobile",           // СберБанк
-        "ru.sberbank.sberbankid",      // Сбер ID
-        "ru.sberbank.sbbol",           // СберБизнес
-        "ru.rshb.dbo",                 // РСХБ Онлайн (honeypot hit confirmed)
-        "ru.vtb24.mobilebanking.android",  // ВТБ Онлайн
-        "ru.vtb.vtbinvestments",       // ВТБ Мои Инвестиции
-        "ru.alfabank.mobile.android",  // Альфа-Банк
-        "ru.alfadirect.client",        // Альфа-Инвестиции
-        "ru.tinkoff.investing",        // Т-Инвестиции
-        "ru.tcsbank.android",          // Т-Банк (legacy id)
-        "com.idamob.tinkoff.android",  // Т-Банк (современный id)
-        "ru.tbank.mobile",             // Т-Банк (ребрендинг 2024)
-        "ru.tinkoff.bnpl",             // Долями (Т-BNPL)
-        "ru.gazprombank.android.mobilebank.app",  // Газпромбанк
-        "ru.sovcombank.app",           // Совкомбанк
-        "ru.mkb.mobile",               // МКБ
-        "ru.psb.ifl",                  // ПСБ
-        "ru.pochtabank.android",       // Почта Банк
-        "ru.raiffeisen.mobile.new",    // Райффайзенбанк
-        "ru.openbank.mobile",          // Банк «Открытие»
-        "ru.rosbank.android",          // Росбанк
-        "ru.uniastrum",                // Юникредит / UniCredit Russia
-        "com.akbars.mw",               // Ак Барс
+        // Сбер
+        "ru.sberbankmobile",
+        "ru.sberbank.sberbankid",
+        "ru.sberbank.sbbol",            // СберБизнес
+        "ru.sber.telecom",              // Сбер Мобайл
+        // ВТБ
+        "ru.vtb24.mobilebanking.android",
+        "ru.vtb.vtbinvestments",
+        // Альфа
+        "ru.alfabank.mobile.android",
+        "ru.alfadirect.client",
+        // Т-Банк / Тинькофф
+        "ru.tinkoff.investing",
+        "ru.tcsbank.android",
+        "com.idamob.tinkoff.android",
+        "ru.tbank.mobile",
+        "ru.tinkoff.bnpl",              // Долями
+        // Газпромбанк
+        "ru.gazprombank.android.mobilebank.app",
+        // Россельхозбанк — honeypot hit confirmed
+        "ru.rshb.dbo",
+        // Совкомбанк + Халва
+        "ru.sovcombank.app",
+        "ru.sovcombank.dms",
+        "ru.sovcomcard.halva.v1",
+        // МКБ, ПСБ, Почта Банк, Райффайзен, Открытие, Росбанк, Ак Барс
+        "ru.mkb.mobile",
+        "ru.psb.ifl",
+        "ru.pochtabank.android",
+        "ru.raiffeisen.mobile.new",
+        "ru.openbank.mobile",
+        "ru.rosbank.android",
+        "com.akbars.mw",
+        // Региональные
+        "ru.bankuralsib.mb.android",    // Уралсиб
+        // Карты лояльности с функциями платежа
+        "ru.cardsmobile.mw3",           // Кошелёк
     )
 
-    /** Госуслуги, ФНС, налоги, Мои документы. Строго следуют методичке. */
+    /** Госуслуги, ФНС, муниципалы, платные дороги, парковки. */
     val government = setOf(
-        "ru.gosuslugi.pos",            // Госуслуги
-        "ru.gosuslugi.zkh",            // Госуслуги Дом
-        "ru.mos.app",                  // Мои документы Москвы
-        "ru.mos.polls",                // Активный гражданин
-        "ru.fns.mytaxes",              // ФНС — Налоги ФЛ
-        "ru.fns.billy",                // ФНС — Мой налог (самозанятые legacy)
-        "com.gnivts.selfemployed",     // Мой налог (самозанятые new)
-        "ru.emias.smart",              // ЕМИАС (медицина Москва)
+        // Госуслуги
+        "ru.gosuslugi.pos",
+        "ru.gosuslugi.zkh",             // Госуслуги Дом
+        "ru.gosuslugi.auto",            // Госуслуги Авто
+        "ru.gosuslugi.goskey",          // ГосКлюч
+        // Москва
+        "ru.mos.app",                   // Моя Москва
+        "ru.mos.polls",                 // Активный гражданин
+        "ru.mos.myid",                  // Мой ID Москвы
+        "ru.altarix.mos.pgu",           // Москва ПГУ
+        "ru.mosgorpass",                // МосГорПасс
+        "ru.mosoblgaz",                 // МосОблГаз
+        "ru.mosparking.appnew",         // МосПаркинг
+        "ru.spb.parking",               // СПб Паркинг
+        // Федеральные
+        "ru.fns.mytaxes",               // ФНС Налоги ФЛ
+        "ru.fns.lkfl",                  // ЛК Налогоплательщика
+        "ru.fns.billy",
+        "com.gnivts.selfemployed",      // Мой налог (самозанятые)
+        "ru.emias.smart",               // ЕМИАС
+        // Транспорт / дороги / почта
+        "ru.russianhighways.mobile",    // Автодор (платные дороги)
         "com.octopod.russianpost.client.android",  // Почта России
-        "ru.rzd.pass",                 // РЖД Пассажирам
-        "ru.nspk.mirpay",              // Mir Pay
-        "ru.nspk.sbpay",               // SberPay (НСПК)
+        "ru.rzd.pass",                  // РЖД
+        "ru.tutu.etrains",              // Туту.Электрички
+        // Платёжные
+        "ru.nspk.mirpay",
+        "ru.nspk.sbpay",
     )
 
-    /** Операторы связи — сливают геолокацию + трафик, поэтому freeze. */
+    /** Операторы связи. */
     val telecom = setOf(
-        "ru.mts.mymts",                // Мой МТС
-        "ru.megafon.mlk",              // МегаФон
-        "ru.beeline.services",         // Билайн
-        "com.tele2.mytele2",           // Tele2
-        "ru.yota.android",             // Yota
-        "ru.rt.smarthome",             // Ростелеком Умный Дом
-        "ru.rostel",                   // Ростелеком
-        "ru.rostel.max",               // Ростелеком (другой id)
+        "ru.mts.mymts",
+        "ru.megafon.mlk",
+        "ru.beeline.services",
+        "com.tele2.mytele2",
+        "ru.yota.android",
+        "ru.rt.smarthome",
+        "ru.rostel",
+        "ru.rostel.max",
     )
 
-    /** Маркетплейсы — каждый со своей платёжной частью, многие палят VPN. */
+    /**
+     * Маркетплейсы, универсамы, DIY, мебель — всё где есть платёжная
+     * часть и/или геолокация. Приоритет — максимальный охват: падает
+     * иконка в лаунчере безопаснее чем палим VPN.
+     */
     val marketplaces = setOf(
-        "com.wildberries.ru",          // Wildberries
-        "ru.ozon.app.android",         // OZON
-        "ru.beru.android",             // Яндекс.Маркет (legacy)
-        "ru.megamarket.marketplace",   // Мегамаркет (Сбер)
-        "com.avito.android",           // Авито
-        "ru.lamoda.main",              // Lamoda
-        "ru.sbcs.store",               // СберМаркет
+        // Большие маркетплейсы
+        "com.wildberries.ru",
+        "ru.ozon.app.android",
+        "ru.ozon.select",
+        "ru.beru.android",              // Я.Маркет legacy
+        "ru.megamarket.marketplace",
+        "com.avito.android",
+        "ru.lamoda.main",
+        "ru.sbcs.store",                // СберМаркет / Купер
+        "ru.instamart",                 // Купер (бывший Instamart)
+        // Универсамы / продукты
+        "ru.lenta.lentochka",
+        "ru.globus.app",
+        "ru.myauchan.droid",            // Ашан
+        "ru.reksoft.okey",              // O'KEY
+        "ru.perekrestok.app",
+        "ru.tander.magnit",
+        "ru.myspar",
+        "ru.pyaterochka.app.browser",   // Пятёрочка
+        "ru.vkusvill",
+        "ru.vkusvill.android",
+        "ru.winelab",
+        // Одежда / обувь / ювелирка
+        "ru.letu",                      // Л'Этуаль
+        "ru.sportmaster.app",
+        "ru.sunlight.sunlight",
+        "ru.sokolov.android",
+        "ru.zolotoy585.customer",       // 585 Золотой
+        // DIY / мебель / электроника
+        "ru.hoff.app",                  // Хофф
+        "ru.askonaapp.android",         // Аскона
+        "ru.mvideo.mobile",
+        "ru.filit.mvideo.b2c",          // М.Видео B2C
+        "ru.dns.shop.android",
+        "ru.dns_shop.new",
+        "ru.citilink",
+        "ru.citilink.mobileapp",
+        "ru.onlinetrade.app",
+        // Авто
+        "ru.autodoc.autodocapp",        // АвтоДок (запчасти)
     )
 
-    /** Доставка еды и продуктов. */
+    /** Аптеки и медицина — сливают состояние здоровья + геолок. */
+    val healthcare = setOf(
+        "ru.apteka",
+        "ru.getpharma.eapteka",         // eapteka
+        "ru.neopharm.stolichki",        // Столички
+        "ru.uteka.app",
+        "ru.zdravcity.app",
+        "ru.smclinic.app.lk",           // СМ-Клиника
+        "ru.smclinic.lk_android",
+    )
+
+    /** Доставка еды и фастфуд. */
     val delivery = setOf(
-        "ru.foodfox.client",           // Яндекс.Еда
-        "ru.yandex.eda",               // Яндекс.Еда (новый id)
-        "com.deliveryclub",            // Delivery Club
-        "ru.samokat.mobile",           // Самокат
-        "ru.vkusvill.android",         // ВкусВилл
+        "ru.foodfox.client",
+        "ru.yandex.eda",
+        "com.deliveryclub",
+        "ru.samokat.mobile",
+        "ru.dodopizza.app",             // Додо
+        "ru.kfc.kfc_delivery",          // KFC
+        "ru.burgerking",                // Burger King
     )
 
-    /** Соцсети, мессенджеры РФ-происхождения, почта. */
+    /** Соцсети, мессенджеры RU, почта, знакомства. */
     val social = setOf(
-        "com.vkontakte.android",       // VK
-        "ru.ok.android",               // Одноклассники
-        "com.vk.vkvideo",              // VK Видео
-        "ru.vk.store",                 // RuStore
-        "ru.oneme.app",                // MAX (мессенджер)
+        // VK экосистема
+        "com.vkontakte.android",
+        "com.vk.im",                    // VK Мессенджер (отдельный APK)
+        "com.vk.vkvideo",
+        "com.vk.love",                  // ВК Знакомства
+        "com.uma.musicvk",
+        "ru.vk.store",                  // RuStore
+        // Одноклассники
+        "ru.ok.android",
+        // MAX (VK-мессенджер ребрендинг)
+        "ru.oneme.app",
         "ru.oneme.max",
         "com.oneme.max",
-        "ru.mail.mailapp",             // Mail
-        "com.uma.musicvk",             // VK Музыка (legacy)
-        "ru.dahl.messenger",           // Даль — ещё один RU-мессенджер
+        // Mail
+        "ru.mail.mailapp",
+        "ru.mail.cloud",
+        // Прочие RU-мессенджеры
+        "ru.dahl.messenger",
     )
 
-    /** RU-медиа/стриминг. Палят VPN чтоб отказать в воспроизведении с non-RU IP. */
+    /** RU-медиа/стриминг — палят VPN чтоб отказать в воспроизведении с non-RU IP. */
     val media = setOf(
-        "ru.rutube.app",               // RUTUBE
-        "ru.ivi.client",               // ivi
-        "ru.okko.tv",                  // Okko
-        "ru.mts.mtstv",                // KION (МТС ТВ)
-        "ru.rt.video.app.mobile",      // Wink (Ростелеком)
-        "ru.more.play",                // PREMIER
-        "ru.mobileup.channelone",      // Первый канал
-        "ru.litres.android",           // ЛитРес
+        "ru.rutube.app",
+        "ru.ivi.client",
+        "ru.okko.tv",
+        "ru.mts.mtstv",                 // KION
+        "ru.rt.video.app.mobile",       // Wink
+        "ru.more.play",                 // PREMIER
+        "ru.mobileup.channelone",
+        "ru.start.androidmobile",       // START
+        "ru.litres.android",
+        "ru.plus.bookmate",             // Bookmate (Я.Плюс)
     )
 
     /** Транспорт, шеринг, каршеринг. */
     val transport = setOf(
-        "com.punicapp.whoosh",         // Whoosh (самокаты)
-        "ru.urentbike.app",            // Urent (велосипеды)
-        "com.citymobil.android",       // Ситимобил (ушёл, но может остаться)
+        "com.punicapp.whoosh",
+        "ru.urentbike.app",
+        "com.citymobil.android",
+        "ru.belkacar.belkacar",         // BelkaCar
     )
 
     /**
-     * Яндекс-экосистема. Дублирует prefix `ru.yandex.` / `com.yandex.`, но явно
-     * перечислено — чтобы UI показывал конкретные приложения.
+     * Яндекс-экосистема. Частично матчится через prefix `ru.yandex.` /
+     * `com.yandex.` — но явный список помогает UI показать конкретные имена.
      */
     val yandex = setOf(
-        "com.yandex.browser",          // Я.Браузер
-        "com.yandex.searchplugin",     // Я.Старт / Я.Приложение
-        "com.yandex.mail",             // Я.Почта
-        "ru.yandex.disk",              // Я.Диск
-        "ru.yandex.market",            // Я.Маркет
-        "ru.yandex.taxi",              // Я.Go (бывший такси)
-        "ru.yandex.music",             // Я.Музыка
-        "ru.yandex.yandexmaps",        // Я.Карты
-        "ru.yandex.yandexnavi",        // Я.Навигатор
-        "com.yandex.lavka",            // Я.Лавка
-        "com.yandex.yamb",             // Я.Мессенджер
-        "com.yandex.plus.home",        // Я.Плюс
-        "com.yandex.bank",             // Я.Банк (Ozon Bank preview)
-        "ru.yandex.realty",            // Я.Недвижимость
-        "ru.kinopoisk",                // Кинопоиск
-        "ru.zen.android",              // Дзен (отпочковался, но ещё алиасится)
+        "com.yandex.browser",
+        "com.yandex.searchplugin",
+        "com.yandex.searchapp",
+        "com.yandex.aliceapp",
+        "com.yandex.mail",
+        "com.yandex.lavka",
+        "com.yandex.yamb",
+        "com.yandex.plus.home",
+        "com.yandex.bank",
+        "com.yandex.iot",
+        "com.yandex.mobile.drive",
+        "com.yandex.shedevrus",
+        "ru.yandex.disk",
+        "ru.yandex.market",
+        "ru.yandex.taxi",
+        "ru.yandex.music",
+        "ru.yandex.yandexmaps",
+        "ru.yandex.yandexnavi",
+        "ru.yandex.metro",
+        "ru.yandex.realty",
+        "ru.yandex.mobile.afisha",
+        "ru.yandex.mobile.gasstations",
+        "ru.yandex.travel",
+        "ru.yandex.translate",
+        "ru.yandex.weatherplugin",
+        "ru.yandex.androidkeyboard",
+        "ru.yandex.key",
+        "ru.kinopoisk",
+        "ru.zen.android",
     )
 
-    /** Ритейл, электроника, одежда. */
-    val retail = setOf(
-        "ru.perekrestok.app",          // Перекрёсток
-        "ru.tander.magnit",            // Магнит
-        "ru.myspar",                   // SPAR
-        "ru.mvideo.mobile",            // М.Видео
-        "ru.dns_shop.new",             // DNS
-        "ru.citilink.mobileapp",       // Ситилинк
+    /** АЗС — сливают геолок, лояльность, реестр топлива. */
+    val fuel = setOf(
+        "ru.pichesky.rosneft",              // Роснефть
+        "ru.serebryakovas.lukoilmobileapp", // Лукойл
     )
 
     /** Страхование. */
     val insurance = setOf(
-        "ru.alfastrah.app",            // АльфаСтрахование
-        "ru.ingos.mobile.insurance",   // Ингосстрах
-        "ru.reso.client",              // РЕСО
+        "ru.alfastrah.app",
+        "ru.ingos.ingomobile",
+        "ru.ingos.mobile.insurance",
+        "ru.reso.client",
     )
 
-    /** Классифайды, объявления. */
+    /** Классифайды, объявления, недвижимость. */
     val classifieds = setOf(
-        "com.cian.main",               // Циан (недвижимость)
-        "ru.auto.ara",                 // Auto.ru
+        "com.cian.main",
+        "ru.auto.ara",
     )
 
-    /** Прочее — то что не влезает в категории, но точно хочется freeze'ить. */
+    /** Прочее RU-происхождения с трекерами / геолокой. */
     val other = setOf(
-        "ru.hh.android",               // hh.ru
-        "ru.polypay.otk",              // Полипэй / лояльность
-        "ru.dublgis.dgismobile",       // 2GIS (карты, палят геолок)
-        "ru.palich.android",           // Палыч
-        "ru.briz.rendezvous",          // Briz
-        "com.setka",                   // Сетка
+        "ru.hh.android",
+        "ru.polypay.otk",
+        "ru.dublgis.dgismobile",            // 2GIS
+        "ru.afisha.android",                // Афиша
+        "ru.chitaigorod.mobile",            // Читай-город
+        "ru.moremania.techboss",
+        "ru.webinar.mobile",
+        "ru.obshchinaru.obshchina",
+        "ru.palich.android",
+        "ru.briz.rendezvous",
+        "com.setka",
     )
 
     /**
@@ -204,24 +303,25 @@ object DefaultRestrictedApps {
 
     val categories: List<Category> = listOf(
         Category("banks", "Банки и финтех", banks),
-        Category("gov", "Госуслуги", government),
+        Category("gov", "Госуслуги / муниципалы", government),
         Category("telecom", "Связь", telecom),
-        Category("marketplaces", "Маркетплейсы", marketplaces),
-        Category("delivery", "Доставка", delivery),
+        Category("marketplaces", "Маркетплейсы и магазины", marketplaces),
+        Category("healthcare", "Аптеки и клиники", healthcare),
+        Category("delivery", "Доставка / фастфуд", delivery),
         Category("social", "Соцсети и почта", social),
-        Category("media", "Медиа и стриминг", media),
-        Category("transport", "Транспорт", transport),
+        Category("media", "Медиа и стриминг (RU)", media),
+        Category("transport", "Транспорт / шеринг", transport),
         Category("yandex", "Яндекс", yandex),
-        Category("retail", "Магазины", retail),
+        Category("fuel", "АЗС", fuel),
         Category("insurance", "Страхование", insurance),
         Category("classifieds", "Объявления", classifieds),
         Category("other", "Прочее", other),
     )
 
-    /** Полный плоский набор — объединение всех категорий. */
+    /** Полный плоский набор. */
     val packageNames: Set<String> = categories.fold(emptySet()) { acc, cat -> acc + cat.packages }
 
-    /** Префиксы — любой пакет, начинающийся с этих строк, считается restricted. */
+    /** Префиксы — любой пакет начинающийся с них = restricted. */
     val prefixPatterns = listOf(
         "com.yandex.",
         "ru.yandex.",

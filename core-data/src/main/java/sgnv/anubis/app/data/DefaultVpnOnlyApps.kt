@@ -61,10 +61,18 @@ object DefaultVpnOnlyApps {
         "com.linkedin.android",                // LinkedIn (заблокирован РКН)
     )
 
-    /** Чат / discourse / форумы. */
+    /** Чат / мессенджеры / форумы — всё что требует VPN для полной функциональности. */
     val chat = setOf(
         "com.discord",                         // Discord (замедлен РКН)
         "com.reddit.frontpage",                // Reddit
+        // Telegram: сообщения работают без VPN, но голосовые/видео-звонки
+        // заблокированы DPI с 2024 — для полноценного использования нужен VPN.
+        "org.telegram.messenger",
+        "org.telegram.plus",                   // Plus Messenger (fork)
+        "org.thunderdog.challegram",           // Telegram X
+        "org.telegram.messenger.web",
+        // Signal — для регистрации нужна зарубежная SIM или VPN.
+        "org.thoughtcrime.securesms",
     )
 
     /** AI-чатботы — требуют зарубежного IP для регистрации / работы. */
