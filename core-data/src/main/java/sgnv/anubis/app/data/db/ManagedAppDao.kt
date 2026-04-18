@@ -19,6 +19,9 @@ interface ManagedAppDao {
     @Query("SELECT * FROM managed_apps WHERE packageName = :packageName")
     suspend fun get(packageName: String): ManagedApp?
 
+    @Query("SELECT packageName FROM managed_apps")
+    suspend fun getAllPackageNames(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(app: ManagedApp)
 
