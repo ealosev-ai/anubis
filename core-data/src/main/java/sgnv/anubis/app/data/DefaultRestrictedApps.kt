@@ -338,15 +338,27 @@ object DefaultRestrictedApps {
      * показывает пустое место и тихо страдает.
      */
     val neverRestrict = setOf(
-        // Клавиатуры / input methods
-        "ru.yandex.androidkeyboard",        // Яндекс.Клавиатура
-        "com.google.android.inputmethod.latin",   // Gboard
-        "com.google.android.inputmethod.pinyin",  // Google Pinyin (китайская)
-        "com.touchtype.swiftkey",           // SwiftKey
-        "com.samsung.android.honeyboard",   // Samsung Keyboard
+        // Приватные клавиатуры без облака (не шлют телеметрию).
+        "helium314.keyboard",               // HeliBoard (F-Droid)
+        "com.menny.android.anysoftkeyboard", // AnySoftKeyboard
+        "app.futo.keyboard",                // FUTO Keyboard (если установлена)
+        // Google Gboard — телеметрия есть, но через Firebase (не AppMetrica),
+        // и Google уже знает про твой VPN через Play Services. Держим как fallback
+        // IME, чтобы после заморозки Я.Клавы было чем печатать пока HeliBoard
+        // настраивается.
+        "com.google.android.inputmethod.latin",
+        "com.google.android.inputmethod.pinyin",
+        // OEM IME — нужен как last-resort если Android откатится к стокому.
         "com.hihonor.ims",                  // Honor Input
         "com.huawei.ims",                   // Huawei Input
-        "com.touchpal.android",             // TouchPal
+        "com.samsung.android.honeyboard",   // Samsung Keyboard
+        // SwiftKey (Microsoft) — свой поток телеметрии. НЕ в AppMetrica,
+        // корреляция с RU-банками ниже. Оставляем доступной.
+        "com.touchtype.swiftkey",
+        // Яндекс.Клавиатура (ru.yandex.androidkeyboard) НЕ в whitelist —
+        // сливает VPN-статус через AppMetrica тот же device_id что и Сбер/РСХБ.
+        // Прежде чем её замораживать, убедись что активен другой IME
+        // (HeliBoard/Gboard), иначе устройство останется без клавиатуры.
     )
 
     fun isKnownRestricted(packageName: String): Boolean {
