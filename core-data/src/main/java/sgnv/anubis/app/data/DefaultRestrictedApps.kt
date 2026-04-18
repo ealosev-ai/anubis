@@ -327,7 +327,30 @@ object DefaultRestrictedApps {
         "ru.yandex.",
     )
 
+    /**
+     * Явные исключения из авто-выбора — приложения, заморозка которых сломает
+     * UX устройства. Даже если пакет матчится по prefix или попал в какой-то
+     * set, мы его НЕ включаем.
+     *
+     * Главная категория — input methods (клавиатуры): без активной IME
+     * пользователь физически не сможет печатать когда VPN on. Android не
+     * переключается автоматически на другую клавиатуру если текущая замёрзла —
+     * показывает пустое место и тихо страдает.
+     */
+    val neverRestrict = setOf(
+        // Клавиатуры / input methods
+        "ru.yandex.androidkeyboard",        // Яндекс.Клавиатура
+        "com.google.android.inputmethod.latin",   // Gboard
+        "com.google.android.inputmethod.pinyin",  // Google Pinyin (китайская)
+        "com.touchtype.swiftkey",           // SwiftKey
+        "com.samsung.android.honeyboard",   // Samsung Keyboard
+        "com.hihonor.ims",                  // Honor Input
+        "com.huawei.ims",                   // Huawei Input
+        "com.touchpal.android",             // TouchPal
+    )
+
     fun isKnownRestricted(packageName: String): Boolean {
+        if (packageName in neverRestrict) return false
         return packageName in packageNames || prefixPatterns.any { packageName.startsWith(it) }
     }
 }

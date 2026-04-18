@@ -1,6 +1,7 @@
 package sgnv.anubis.app.service
 
 import android.content.Context
+import sgnv.anubis.app.data.DefaultRestrictedApps
 import sgnv.anubis.app.data.model.AppGroup
 import sgnv.anubis.app.data.repository.PackageGroupsReader
 import sgnv.anubis.app.shizuku.FreezeActions
@@ -360,7 +361,12 @@ class StealthOrchestrator(
     }
 
     private suspend fun freezeGroup(group: AppGroup) = coroutineScope {
+        // Safety net: даже если пакет из neverRestrict (клавиатуры и пр.) как-то
+        // залип в этой группе (пользователь добавил вручную / legacy-данные),
+        // мы его НЕ морозим. Без IME человек не сможет печатать — freeze
+        // клавиатуры = softbrick UX на VPN-on.
         val packages = repository.getPackagesByGroup(group)
+            .filter { it !in DefaultRestrictedApps.neverRestrict }
         val total = packages.size
         if (total == 0) return@coroutineScope
         // PARALLELISM=2 + delay(100ms) между операциями: на Honor MagicOS параллельные
