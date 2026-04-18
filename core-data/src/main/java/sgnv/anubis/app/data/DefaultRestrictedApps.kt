@@ -338,10 +338,10 @@ object DefaultRestrictedApps {
      * показывает пустое место и тихо страдает.
      */
     val neverRestrict = setOf(
-        // Приватные клавиатуры без облака (не шлют телеметрию).
+        // Приватные клавиатуры без облака (не шлют телеметрию, нет INTERNET permission).
         "helium314.keyboard",               // HeliBoard (F-Droid)
         "com.menny.android.anysoftkeyboard", // AnySoftKeyboard
-        "app.futo.keyboard",                // FUTO Keyboard (если установлена)
+        "org.futo.inputmethod.latin",       // FUTO Keyboard (платная, keyboard.futo.org)
         // Google Gboard — телеметрия есть, но через Firebase (не AppMetrica),
         // и Google уже знает про твой VPN через Play Services. Держим как fallback
         // IME, чтобы после заморозки Я.Клавы было чем печатать пока HeliBoard
