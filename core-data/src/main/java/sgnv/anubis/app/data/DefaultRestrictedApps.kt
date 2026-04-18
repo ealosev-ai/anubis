@@ -139,6 +139,7 @@ object DefaultRestrictedApps {
         "ru.pyaterochka.app.browser",   // Пятёрочка
         "club.chizhik",                 // Чижик (X5 discount)
         "com.ru.dixy",                  // Дикси
+        "com.ladygentleman.app",        // ЛедиДжентльмен (одежда)
         "ru.vkusvill",
         "ru.vkusvill.android",
         "ru.winelab",
@@ -216,12 +217,13 @@ object DefaultRestrictedApps {
         "ru.okko.tv",
         "ru.mts.mtstv",                 // KION
         "ru.rt.video.app.mobile",       // Wink
-        "ru.more.play",                 // PREMIER
+        "ru.more.play",                 // PREMIER (legacy id)
+        "gpm.tnt_premier",              // PREMIER (актуальный id — Газпром Медиа)
         "ru.mobileup.channelone",
         "ru.start.androidmobile",       // START
         "ru.litres.android",
         "ru.plus.bookmate",             // Bookmate (Я.Плюс)
-        "com.zvooq.openplay",           // Звук (RU-стриминг, принадлежит Сбер)
+        "com.zvooq.openplay",           // Звук (Сбер-стриминг)
     )
 
     /** Транспорт, шеринг, каршеринг. */
@@ -231,6 +233,7 @@ object DefaultRestrictedApps {
         "com.citymobil.android",
         "ru.belkacar.belkacar",         // BelkaCar
         "youdrive.today",               // Ситидрайв (бывший YouDrive, Сбер)
+        "com.delimobil.carsharing",     // Делимобиль (стандартный id)
     )
 
     /**
@@ -303,6 +306,9 @@ object DefaultRestrictedApps {
         "ru.palich.android",
         "ru.briz.rendezvous",
         "com.setka",
+        "com.sdkit.gigaapp.app",            // ГигаЧат (Sber AI)
+        "info.goodline.events",             // GoodLine (Кемерово ISP events)
+        "ru.pikabu.android",                // Pikabu (трекеры + RU-IP)
     )
 
     /**

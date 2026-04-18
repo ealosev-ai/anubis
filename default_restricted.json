@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "updatedEpochMs": 1776554000000,
+  "version": 3,
+  "updatedEpochMs": 1776560000000,
   "updatedIso": "2026-04-18",
   "comment": "Список RU-приложений для авто-группировки в Anubis. LOCAL = палят VPN (freeze при VPN on). VPN_ONLY = требуют VPN (freeze при VPN off). neverRestrict = не морозим никогда (клавиатуры). Источник — github.com/ealosev-ai/anubis, обновляется напрямую в main-ветке без пересборки APK.",
   "restricted": [
@@ -55,6 +55,7 @@
         "ru.lenta.lentochka", "ru.globus.app", "ru.myauchan.droid", "ru.reksoft.okey",
         "ru.perekrestok.app", "ru.tander.magnit", "ru.myspar",
         "ru.pyaterochka.app.browser", "club.chizhik", "com.ru.dixy",
+        "com.ladygentleman.app",
         "ru.vkusvill", "ru.vkusvill.android", "ru.winelab",
         "ru.letu", "ru.sportmaster.app", "ru.sunlight.sunlight", "ru.sokolov.android", "ru.zolotoy585.customer",
         "ru.hoff.app", "ru.askonaapp.android",
@@ -95,7 +96,8 @@
       "label": "Медиа и стриминг (RU)",
       "packages": [
         "ru.rutube.app", "ru.ivi.client", "ru.okko.tv", "ru.mts.mtstv",
-        "ru.rt.video.app.mobile", "ru.more.play", "ru.mobileup.channelone",
+        "ru.rt.video.app.mobile", "ru.more.play", "gpm.tnt_premier",
+        "ru.mobileup.channelone",
         "ru.start.androidmobile", "ru.litres.android", "ru.plus.bookmate",
         "com.zvooq.openplay"
       ]
@@ -105,7 +107,7 @@
       "label": "Транспорт / шеринг",
       "packages": [
         "com.punicapp.whoosh", "ru.urentbike.app", "com.citymobil.android",
-        "ru.belkacar.belkacar", "youdrive.today"
+        "ru.belkacar.belkacar", "youdrive.today", "com.delimobil.carsharing"
       ]
     },
     {
@@ -150,7 +152,8 @@
       "packages": [
         "ru.hh.android", "ru.polypay.otk", "ru.dublgis.dgismobile", "ru.afisha.android",
         "ru.chitaigorod.mobile", "ru.moremania.techboss", "ru.webinar.mobile",
-        "ru.obshchinaru.obshchina", "ru.palich.android", "ru.briz.rendezvous", "com.setka"
+        "ru.obshchinaru.obshchina", "ru.palich.android", "ru.briz.rendezvous", "com.setka",
+        "com.sdkit.gigaapp.app", "info.goodline.events", "ru.pikabu.android"
       ]
     }
   ],
