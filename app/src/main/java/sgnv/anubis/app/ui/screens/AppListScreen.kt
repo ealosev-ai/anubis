@@ -211,27 +211,25 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 }
 
 /**
- * Диалог выбора категорий для «Авто-выбор». Пользователь отмечает какие
- * группы приложений автоматически добавить в LOCAL (палят VPN) и в VPN_ONLY
- * (требуют VPN). По умолчанию отмечены «критичные» категории — банки, гос,
- * VPN_ONLY-пакеты. Остальные (ритейл, фастфуд и т.п.) — на выбор.
+ * Диалог выбора категорий для «Авто-выбор». По дефолту ВСЁ отмечено —
+ * мы не знаем точно какие RU-приложения палят VPN, а какие нет; методичка
+ * Минцифры универсальная, давят на всех, и что-то что сегодня не сливает —
+ * завтра может начать после обновления. Поэтому дефолт = максимум защиты,
+ * пользователь снимает галки только с того что ему явно неудобно морозить.
  */
 @Composable
 private fun AutoSelectCategoriesDialog(
     onDismiss: () -> Unit,
     onApply: (restrictedPkgs: Set<String>, restrictedPrefixes: List<String>, vpnOnlyPkgs: Set<String>) -> Unit,
 ) {
-    // «Критичные» категории — по умолчанию отмечены. Банки, гос, telecom,
-    // media (стриминги палят VPN), соцсети/почта (VK экосистема трекает).
-    val criticalRestrictedIds = setOf("banks", "gov", "telecom", "social", "media", "yandex")
+    // Default = всё отмечено. User снимает что не хочет.
     val restrictedChecks = remember {
         mutableStateOf(
             sgnv.anubis.app.data.DefaultRestrictedApps.categories
-                .associate { it.id to (it.id in criticalRestrictedIds) }
+                .associate { it.id to true }
                 .toMutableMap()
         )
     }
-    // VPN_ONLY — все категории по умолчанию отмечены (это немного пакетов).
     val vpnOnlyChecks = remember {
         mutableStateOf(
             sgnv.anubis.app.data.DefaultVpnOnlyApps.categories
@@ -240,8 +238,6 @@ private fun AutoSelectCategoriesDialog(
         )
     }
 
-    // Yandex-категория управляет и prefix-патернами (com.yandex./ru.yandex.)
-    // — без неё случайный `ru.yandex.newapp` не попадёт в auto-select.
     val includePrefixes: Boolean = restrictedChecks.value["yandex"] == true
 
     AlertDialog(
@@ -253,13 +249,23 @@ private fun AutoSelectCategoriesDialog(
             ) {
                 item {
                     Text(
-                        "Уже добавленные вручную приложения не трогаем. Клавиатуры " +
-                            "не морозим никогда. После разморозки иконки могут перемешаться " +
-                            "в папках лаунчера — придётся расставить.",
+                        "Дефолт — максимум защиты. Ручные добавления не трогаем, " +
+                            "клавиатуры не морозим никогда.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            restrictedChecks.value = restrictedChecks.value.mapValues { true }.toMutableMap()
+                            vpnOnlyChecks.value = vpnOnlyChecks.value.mapValues { true }.toMutableMap()
+                        }) { Text("Отметить всё") }
+                        TextButton(onClick = {
+                            restrictedChecks.value = restrictedChecks.value.mapValues { false }.toMutableMap()
+                            vpnOnlyChecks.value = vpnOnlyChecks.value.mapValues { false }.toMutableMap()
+                        }) { Text("Снять всё") }
+                    }
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         "Без VPN (палят туннель — freeze при VPN on)",
                         style = MaterialTheme.typography.titleSmall,

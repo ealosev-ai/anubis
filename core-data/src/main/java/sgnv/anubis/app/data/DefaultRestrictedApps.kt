@@ -135,6 +135,7 @@ object DefaultRestrictedApps {
         "ru.tander.magnit",
         "ru.myspar",
         "ru.pyaterochka.app.browser",   // Пятёрочка
+        "club.chizhik",                 // Чижик (X5 discount)
         "ru.vkusvill",
         "ru.vkusvill.android",
         "ru.winelab",
@@ -167,6 +168,7 @@ object DefaultRestrictedApps {
         "ru.zdravcity.app",
         "ru.smclinic.app.lk",           // СМ-Клиника
         "ru.smclinic.lk_android",
+        "com.programmisty.emiasapp",    // ЕМИАС ИНФО (третья-сторонний клиент ЕМИАС)
     )
 
     /** Доставка еды и фастфуд. */
@@ -214,6 +216,7 @@ object DefaultRestrictedApps {
         "ru.start.androidmobile",       // START
         "ru.litres.android",
         "ru.plus.bookmate",             // Bookmate (Я.Плюс)
+        "com.zvooq.openplay",           // Звук (RU-стриминг, принадлежит Сбер)
     )
 
     /** Транспорт, шеринг, каршеринг. */
@@ -222,6 +225,7 @@ object DefaultRestrictedApps {
         "ru.urentbike.app",
         "com.citymobil.android",
         "ru.belkacar.belkacar",         // BelkaCar
+        "youdrive.today",               // Ситидрайв (бывший YouDrive, Сбер)
     )
 
     /**
