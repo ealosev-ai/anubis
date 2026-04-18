@@ -82,6 +82,7 @@ object DefaultRestrictedApps {
         "ru.mosoblgaz",                 // МосОблГаз
         "ru.mosparking.appnew",         // МосПаркинг
         "ru.spb.parking",               // СПб Паркинг
+        "com.tmpkbilling",              // ТМПК (ЖКХ-биллинг)
         // Федеральные
         "ru.fns.mytaxes",               // ФНС Налоги ФЛ
         "ru.fns.lkfl",                  // ЛК Налогоплательщика
@@ -130,6 +131,7 @@ object DefaultRestrictedApps {
         "ru.aliexpress.buyer",          // AliExpress (китайский, много трекеров)
         // Универсамы / продукты
         "ru.lenta.lentochka",
+        "com.icemobile.lenta.prod",     // Лента Прод (отдельный APK от лента.ру)
         "ru.globus.app",
         "ru.myauchan.droid",            // Ашан
         "ru.reksoft.okey",              // O'KEY
@@ -149,6 +151,7 @@ object DefaultRestrictedApps {
         "ru.sunlight.sunlight",
         "ru.sokolov.android",
         "ru.zolotoy585.customer",       // 585 Золотой
+        "com.johnjolie",                // Джон Джоли (ювелирка)
         // DIY / мебель / электроника
         "ru.hoff.app",                  // Хофф
         "ru.askonaapp.android",         // Аскона
@@ -186,6 +189,7 @@ object DefaultRestrictedApps {
         "ru.kfc.kfc_delivery",          // KFC
         "ru.burgerking",                // Burger King
         "com.apegroup.mcdonaldsrussia", // Вкусно и точка (бывший McDonald's)
+        "pro.tdnm.gurmanica",           // Гурманика (сеть кафе)
     )
 
     /** Соцсети, мессенджеры RU, почта, знакомства. */
@@ -226,6 +230,11 @@ object DefaultRestrictedApps {
         "com.zvooq.openplay",           // Звук (Сбер-стриминг)
     )
 
+    /** Логистика, доставка посылок. Палят геолок получателя/отправителя, трекают. */
+    val shipping = setOf(
+        "com.logistic.sdek",            // СДЭК
+    )
+
     /** Транспорт, шеринг, каршеринг. */
     val transport = setOf(
         "com.punicapp.whoosh",
@@ -234,6 +243,7 @@ object DefaultRestrictedApps {
         "ru.belkacar.belkacar",         // BelkaCar
         "youdrive.today",               // Ситидрайв (бывший YouDrive, Сбер)
         "com.delimobil.carsharing",     // Делимобиль (стандартный id)
+        "by.advasoft.android.troika.app", // Тройка (Moscow transit NFC)
     )
 
     /**
@@ -307,8 +317,11 @@ object DefaultRestrictedApps {
         "ru.briz.rendezvous",
         "com.setka",
         "com.sdkit.gigaapp.app",            // ГигаЧат (Sber AI)
+        "com.sdkit.search.app",             // GigaSearch / Поиск GPT (Sber AI)
         "info.goodline.events",             // GoodLine (Кемерово ISP events)
         "ru.pikabu.android",                // Pikabu (трекеры + RU-IP)
+        "com.rosdomofon.rdua",              // Росдомофон (гео+дверь в квартиру)
+        "com.yclients.mobile.g76422",       // Раздевалка (YClients-tenant: фитнес/салон)
     )
 
     /**
@@ -324,6 +337,7 @@ object DefaultRestrictedApps {
         Category("marketplaces", "Маркетплейсы и магазины", marketplaces),
         Category("healthcare", "Аптеки и клиники", healthcare),
         Category("delivery", "Доставка / фастфуд", delivery),
+        Category("shipping", "Посылки / логистика", shipping),
         Category("social", "Соцсети и почта", social),
         Category("media", "Медиа и стриминг (RU)", media),
         Category("transport", "Транспорт / шеринг", transport),

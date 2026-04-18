@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "updatedEpochMs": 1776560000000,
+  "version": 4,
+  "updatedEpochMs": 1776568000000,
   "updatedIso": "2026-04-18",
   "comment": "Список RU-приложений для авто-группировки в Anubis. LOCAL = палят VPN (freeze при VPN on). VPN_ONLY = требуют VPN (freeze при VPN off). neverRestrict = не морозим никогда (клавиатуры). Источник — github.com/ealosev-ai/anubis, обновляется напрямую в main-ветке без пересборки APK.",
   "restricted": [
@@ -29,6 +29,7 @@
         "ru.gosuslugi.pos", "ru.gosuslugi.zkh", "ru.gosuslugi.auto", "ru.gosuslugi.goskey",
         "ru.mos.app", "ru.mos.polls", "ru.mos.myid", "ru.altarix.mos.pgu",
         "ru.mosgorpass", "ru.mosoblgaz", "ru.mosparking.appnew", "ru.spb.parking",
+        "com.tmpkbilling",
         "ru.fns.mytaxes", "ru.fns.lkfl", "ru.fns.billy", "com.gnivts.selfemployed",
         "ru.emias.smart",
         "ru.russianhighways.mobile",
@@ -52,12 +53,14 @@
         "ru.megamarket.marketplace", "com.avito.android",
         "ru.lamoda.main", "com.lamoda.lite",
         "ru.sbcs.store", "ru.instamart", "ru.aliexpress.buyer",
-        "ru.lenta.lentochka", "ru.globus.app", "ru.myauchan.droid", "ru.reksoft.okey",
+        "ru.lenta.lentochka", "com.icemobile.lenta.prod",
+        "ru.globus.app", "ru.myauchan.droid", "ru.reksoft.okey",
         "ru.perekrestok.app", "ru.tander.magnit", "ru.myspar",
         "ru.pyaterochka.app.browser", "club.chizhik", "com.ru.dixy",
         "com.ladygentleman.app",
         "ru.vkusvill", "ru.vkusvill.android", "ru.winelab",
-        "ru.letu", "ru.sportmaster.app", "ru.sunlight.sunlight", "ru.sokolov.android", "ru.zolotoy585.customer",
+        "ru.letu", "ru.sportmaster.app", "ru.sunlight.sunlight", "ru.sokolov.android",
+        "ru.zolotoy585.customer", "com.johnjolie",
         "ru.hoff.app", "ru.askonaapp.android",
         "ru.mvideo.mobile", "ru.filit.mvideo.b2c", "ru.dns.shop.android", "ru.dns_shop.new",
         "ru.citilink", "ru.citilink.mobileapp", "ru.onlinetrade.app", "ru.autodoc.autodocapp"
@@ -78,7 +81,14 @@
       "packages": [
         "ru.foodfox.client", "ru.yandex.eda", "com.deliveryclub", "ru.samokat.mobile",
         "ru.dodopizza.app", "ru.kfc.kfc_delivery", "ru.burgerking",
-        "com.apegroup.mcdonaldsrussia"
+        "com.apegroup.mcdonaldsrussia", "pro.tdnm.gurmanica"
+      ]
+    },
+    {
+      "id": "shipping",
+      "label": "Посылки / логистика",
+      "packages": [
+        "com.logistic.sdek"
       ]
     },
     {
@@ -107,7 +117,8 @@
       "label": "Транспорт / шеринг",
       "packages": [
         "com.punicapp.whoosh", "ru.urentbike.app", "com.citymobil.android",
-        "ru.belkacar.belkacar", "youdrive.today", "com.delimobil.carsharing"
+        "ru.belkacar.belkacar", "youdrive.today", "com.delimobil.carsharing",
+        "by.advasoft.android.troika.app"
       ]
     },
     {
@@ -153,7 +164,9 @@
         "ru.hh.android", "ru.polypay.otk", "ru.dublgis.dgismobile", "ru.afisha.android",
         "ru.chitaigorod.mobile", "ru.moremania.techboss", "ru.webinar.mobile",
         "ru.obshchinaru.obshchina", "ru.palich.android", "ru.briz.rendezvous", "com.setka",
-        "com.sdkit.gigaapp.app", "info.goodline.events", "ru.pikabu.android"
+        "com.sdkit.gigaapp.app", "com.sdkit.search.app",
+        "info.goodline.events", "ru.pikabu.android",
+        "com.rosdomofon.rdua", "com.yclients.mobile.g76422"
       ]
     }
   ],

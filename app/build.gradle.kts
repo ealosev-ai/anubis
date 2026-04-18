@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -15,8 +16,8 @@ android {
         applicationId = "sgnv.anubis.app"
         minSdk = 29
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 4
+        versionName = "0.1.3"
         // Custom runner подменяет AnubisApp на TestAnubisApp в тестах —
         // для Compose UI-сценариев важно не тянуть реальный VpnClientManager.
         testInstrumentationRunner = "sgnv.anubis.app.AnubisTestRunner"
@@ -28,7 +29,11 @@ android {
             val props = Properties().apply {
                 rootProject.file("signing.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
             }
-            storeFile = rootProject.file(props.getProperty("storeFile", "release.keystore"))
+            // storeFile путь может быть абсолютным (keystore вне репо) или
+            // относительным к корню проекта.
+            val storePath = props.getProperty("storeFile", "release.keystore")
+            val storeCandidate = File(storePath)
+            storeFile = if (storeCandidate.isAbsolute) storeCandidate else rootProject.file(storePath)
             storePassword = props.getProperty("storePassword", "")
             keyAlias = props.getProperty("keyAlias", "")
             keyPassword = props.getProperty("keyPassword", "")
@@ -37,6 +42,10 @@ android {
 
     buildTypes {
         release {
+            // Свой форк → свой applicationId `sgnv.anubis.app.fork`, чтобы
+            // не конфликтовать с upstream-пакетом `sgnv.anubis.app` автора
+            // (можно держать оба параллельно на одном устройстве).
+            applicationIdSuffix = ".fork"
             isMinifyEnabled = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
@@ -45,8 +54,9 @@ android {
             )
         }
         debug {
-            // Ставим debug рядом с release: другой applicationId = другое приложение для Android.
-            // Позволяет держать на устройстве одновременно релизную Anubis автора и наш форк.
+            // Debug — отдельный applicationId чтобы не конфликтовать с upstream
+            // `sgnv.anubis.app` и нашим release `sgnv.anubis.app.fork`. Все три
+            // (upstream, наш release, наш debug) живут параллельно на устройстве.
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }

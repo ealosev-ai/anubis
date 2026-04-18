@@ -22,6 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Tab
@@ -291,12 +292,6 @@ private fun AutoSelectCategoriesDialog(
                             restrictedChecks.value = restrictedChecks.value.mapValues { false }.toMutableMap()
                             vpnOnlyChecks.value = vpnOnlyChecks.value.mapValues { false }.toMutableMap()
                         }) { Text("Снять всё") }
-                        TextButton(
-                            onClick = { confirmReset = true },
-                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) { Text("Сбросить группы") }
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -338,6 +333,18 @@ private fun AutoSelectCategoriesDialog(
                             vpnOnlyChecks.value = m
                         },
                     )
+                }
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { confirmReset = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("Сбросить все мои группы") }
                 }
             }
         },
