@@ -129,6 +129,7 @@ open class VpnClientManager(
     }
 
     open override fun launchApp(packageName: String) {
+
         val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
         if (launchIntent != null) {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
