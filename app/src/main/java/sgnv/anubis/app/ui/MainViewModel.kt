@@ -56,6 +56,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val activeVpnPackage: StateFlow<String?> = vpnClientManager.activeVpnPackage
     val shizukuStatus: StateFlow<ShizukuStatus> = shizukuManager.status
     val frozenVersion: StateFlow<Long> = orchestrator.frozenVersion
+    val batchProgress: StateFlow<sgnv.anubis.app.service.StealthOrchestrator.BatchProgress?> =
+        orchestrator.batchProgress
 
     fun getVpnPermissionIntent(): Intent? = StealthVpnService.prepareVpn(getApplication())
 

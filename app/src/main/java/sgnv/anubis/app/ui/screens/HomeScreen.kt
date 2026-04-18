@@ -104,6 +104,7 @@ fun HomeScreen(
     val stealthState by viewModel.stealthState.collectAsState()
     val lastError by viewModel.lastError.collectAsState()
     val shizukuStatus by viewModel.shizukuStatus.collectAsState()
+    val batchProgress by viewModel.batchProgress.collectAsState()
     val vpnActive by viewModel.vpnActive.collectAsState()
     val activeVpnClient by viewModel.activeVpnClient.collectAsState()
     val activeVpnPackage by viewModel.activeVpnPackage.collectAsState()
@@ -236,6 +237,28 @@ fun HomeScreen(
                         modifier = Modifier.semantics {
                             stateDescription = if (isEnabled) "защита активна" else "защита отключена"
                         }
+                    )
+                }
+            }
+        }
+
+        // Прогресс batch-операции (freeze/unfreeze группы). Показываем
+        // только пока идёт операция — чтобы пользователь не думал что
+        // «Рабочее окружение» подвисло, когда на деле морозится 54 приложения
+        // по одному с паузой 100мс (Honor-лаунчер иначе давится PACKAGE_REMOVED).
+        batchProgress?.let { p ->
+            Spacer(Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "${p.label}: ${p.done} / ${p.total}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { if (p.total == 0) 0f else p.done.toFloat() / p.total },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }

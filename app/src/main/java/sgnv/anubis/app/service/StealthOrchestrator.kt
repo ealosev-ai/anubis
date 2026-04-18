@@ -67,6 +67,14 @@ class StealthOrchestrator(
     val frozenVersion: StateFlow<Long> = _frozenVersion
 
     /**
+     * Прогресс текущей batch-операции (freeze/unfreeze группы). null = нет активной
+     * операции. UI рисует линейку и "done / total", пока это не null.
+     */
+    data class BatchProgress(val done: Int, val total: Int, val label: String)
+    private val _batchProgress = MutableStateFlow<BatchProgress?>(null)
+    val batchProgress: StateFlow<BatchProgress?> = _batchProgress
+
+    /**
      * Enable stealth (VPN ON): freeze LOCAL apps, start VPN.
      * VPN_ONLY stays frozen — they are only unfrozen by explicit launch.
      */
@@ -233,12 +241,14 @@ class StealthOrchestrator(
         unfreezeAll(vpnGroup)
         bumpVersion()
 
-        // 4 — launch каждое. delay(500) чтобы Android не отменил предыдущий
-        // startActivity когда сразу прилетает следующий NEW_TASK.
+        // 4 — launch каждое. delay(300) чтобы Android не отменил предыдущий
+        // startActivity когда сразу прилетает следующий NEW_TASK. 300ms оптимум:
+        // меньше — ActivityManager сливает NEW_TASK-intent'ы, больше — сумма
+        // задержек на 15+ пакетов становится заметной (7с+ только на launch).
         for (pkg in vpnGroup) {
             if (shizukuManager.isAppInstalled(pkg)) {
                 vpnClientManager.launchApp(pkg)
-                delay(500)
+                delay(300)
             }
         }
 
@@ -285,16 +295,25 @@ class StealthOrchestrator(
     }
 
     private suspend fun unfreezeAll(packages: Set<String>) = coroutineScope {
+        val total = packages.size
+        if (total == 0) return@coroutineScope
+        _batchProgress.value = BatchProgress(done = 0, total = total, label = "Разморозка")
         val sem = Semaphore(permits = FREEZE_PARALLELISM)
+        val counter = java.util.concurrent.atomic.AtomicInteger(0)
         packages.map { pkg ->
             async {
                 sem.withPermit {
                     if (shizukuManager.isAppInstalled(pkg) && shizukuManager.isAppFrozen(pkg)) {
                         shizukuManager.unfreezeApp(pkg)
+                        delay(INTER_OP_DELAY_MS)
                     }
+                    _batchProgress.value = BatchProgress(
+                        done = counter.incrementAndGet(), total = total, label = "Разморозка",
+                    )
                 }
             }
         }.awaitAll()
+        _batchProgress.value = null
     }
 
     /**
@@ -342,19 +361,29 @@ class StealthOrchestrator(
 
     private suspend fun freezeGroup(group: AppGroup) = coroutineScope {
         val packages = repository.getPackagesByGroup(group)
-        // Параллельно, но с ограничением — Shizuku shell-uid процесс спавнит
-        // отдельный pm на каждый вызов, а PackageManager на 10+ одновременных
-        // disable-user уже начинает тормозить систему.
+        val total = packages.size
+        if (total == 0) return@coroutineScope
+        // PARALLELISM=2 + delay(100ms) между операциями: на Honor MagicOS параллельные
+        // `pm disable-user` шлют PACKAGE_REMOVED broadcasts, UniHome-лаунчер не
+        // успевает переваривать — получается ANR. 2 в параллель с паузой
+        // удерживают штатный ритм перерисовки launcher grid'а.
+        _batchProgress.value = BatchProgress(done = 0, total = total, label = "Заморозка")
         val sem = Semaphore(permits = FREEZE_PARALLELISM)
+        val counter = java.util.concurrent.atomic.AtomicInteger(0)
         packages.map { pkg ->
             async {
                 sem.withPermit {
                     if (shizukuManager.isAppInstalled(pkg) && !shizukuManager.isAppFrozen(pkg)) {
                         shizukuManager.freezeApp(pkg)
+                        delay(INTER_OP_DELAY_MS)
                     }
+                    _batchProgress.value = BatchProgress(
+                        done = counter.incrementAndGet(), total = total, label = "Заморозка",
+                    )
                 }
             }
         }.awaitAll()
+        _batchProgress.value = null
     }
 
     private suspend fun waitForVpnOff(timeoutMs: Long): Boolean {
@@ -383,7 +412,9 @@ class StealthOrchestrator(
     }
 
     private companion object {
-        const val FREEZE_PARALLELISM = 4
+        const val FREEZE_PARALLELISM = 2
+        /** Пауза между freeze/unfreeze операциями, чтобы Honor launcher переварил PACKAGE_REMOVED broadcast. */
+        const val INTER_OP_DELAY_MS = 100L
     }
 }
 
