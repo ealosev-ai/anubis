@@ -280,7 +280,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeFromGroup(packageName: String) = appListController.removeFromGroup(packageName)
     fun createShortcut(packageName: String) = appListController.createShortcut(packageName)
     fun cycleAppGroup(packageName: String) = appListController.cycleAppGroup(packageName)
-    val restrictedListProvider: sgnv.anubis.app.data.RestrictedListProvider = app.restrictedListProvider
+    val restrictedList: StateFlow<sgnv.anubis.app.data.RestrictedList> =
+        app.restrictedListProvider.list
+    val restrictedLastSync: StateFlow<Long> = app.restrictedListProvider.lastSyncFlow
+    val restrictedSyncState: StateFlow<sgnv.anubis.app.data.RestrictedListProvider.SyncState> =
+        app.restrictedListProvider.syncState
 
     fun autoSelectRestricted(
         restrictedPackages: Set<String>,

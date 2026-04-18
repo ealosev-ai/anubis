@@ -199,11 +199,18 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     }
 
     if (showAutoWarning) {
-        val list = viewModel.restrictedListProvider.current()
+        val list by viewModel.restrictedList.collectAsState()
+        val lastSyncMs by viewModel.restrictedLastSync.collectAsState()
+        val syncState by viewModel.restrictedSyncState.collectAsState()
         AutoSelectCategoriesDialog(
             list = list,
-            lastSyncMs = viewModel.restrictedListProvider.lastSyncMs(),
+            lastSyncMs = lastSyncMs,
+            syncState = syncState,
             onSync = { viewModel.syncRestrictedList() },
+            onResetGroups = {
+                viewModel.unfreezeAllAndClear()
+                showAutoWarning = false
+            },
             onDismiss = { showAutoWarning = false },
             onApply = { restrictedPkgs, restrictedPrefs, vpnOnlyPkgs ->
                 prefs.edit().putBoolean("seen_auto_warning", true).apply()
@@ -225,7 +232,9 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 private fun AutoSelectCategoriesDialog(
     list: sgnv.anubis.app.data.RestrictedList,
     lastSyncMs: Long,
+    syncState: sgnv.anubis.app.data.RestrictedListProvider.SyncState,
     onSync: () -> Unit,
+    onResetGroups: () -> Unit,
     onDismiss: () -> Unit,
     onApply: (restrictedPkgs: Set<String>, restrictedPrefixes: List<String>, vpnOnlyPkgs: Set<String>) -> Unit,
 ) {
@@ -236,8 +245,14 @@ private fun AutoSelectCategoriesDialog(
         mutableStateOf(list.vpnOnly.associate { it.id to true }.toMutableMap())
     }
     val includePrefixes: Boolean = restrictedChecks.value["yandex"] == true
-    val syncLabel = if (lastSyncMs == 0L) "список встроенный"
-        else "обновлён ${relativeTime(lastSyncMs)}"
+    val syncLabel = when {
+        syncState is sgnv.anubis.app.data.RestrictedListProvider.SyncState.Running -> "обновляется…"
+        syncState is sgnv.anubis.app.data.RestrictedListProvider.SyncState.Error ->
+            "ошибка: ${syncState.message.take(40)}"
+        lastSyncMs == 0L -> "список встроенный"
+        else -> "обновлён ${relativeTime(lastSyncMs)}"
+    }
+    var confirmReset by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -276,6 +291,12 @@ private fun AutoSelectCategoriesDialog(
                             restrictedChecks.value = restrictedChecks.value.mapValues { false }.toMutableMap()
                             vpnOnlyChecks.value = vpnOnlyChecks.value.mapValues { false }.toMutableMap()
                         }) { Text("Снять всё") }
+                        TextButton(
+                            onClick = { confirmReset = true },
+                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) { Text("Сбросить группы") }
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -338,6 +359,29 @@ private fun AutoSelectCategoriesDialog(
             TextButton(onClick = onDismiss) { Text("Отмена") }
         },
     )
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Сбросить все группы?") },
+            text = {
+                Text(
+                    "Все приложения из «Без VPN», «Только VPN», «С VPN» будут " +
+                        "разморожены и убраны из групп. Потом сможете применить " +
+                        "новый авто-выбор с нуля."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReset = false
+                    onResetGroups()
+                }) { Text("Сбросить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) { Text("Отмена") }
+            },
+        )
+    }
 }
 
 private fun relativeTime(ms: Long): String {

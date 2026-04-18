@@ -3,6 +3,8 @@ package sgnv.anubis.app.data
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,13 +30,24 @@ class RestrictedListProvider(private val context: Context) {
     private val cacheFile: File = File(context.filesDir, CACHE_FILE)
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    @Volatile
-    private var cached: RestrictedList = loadInitial()
+    private val _list = MutableStateFlow(loadInitial())
+    val list: StateFlow<RestrictedList> = _list
 
-    /** Текущий эффективный список. Берётся из кеша, fallback — built-in. */
-    fun current(): RestrictedList = cached
+    private val _lastSyncMs = MutableStateFlow(prefs.getLong(KEY_LAST_SYNC, 0L))
+    val lastSyncFlow: StateFlow<Long> = _lastSyncMs
 
-    fun lastSyncMs(): Long = prefs.getLong(KEY_LAST_SYNC, 0L)
+    private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
+    val syncState: StateFlow<SyncState> = _syncState
+
+    sealed class SyncState {
+        data object Idle : SyncState()
+        data object Running : SyncState()
+        data class Error(val message: String) : SyncState()
+    }
+
+    /** Snapshot API — для non-Compose кода (AppRepository). */
+    fun current(): RestrictedList = _list.value
+    fun lastSyncMs(): Long = _lastSyncMs.value
     fun lastError(): String? = prefs.getString(KEY_LAST_ERROR, null)
 
     /**
@@ -43,6 +56,7 @@ class RestrictedListProvider(private val context: Context) {
      * кеш читается через Volatile-ссылку.
      */
     suspend fun sync(url: String = REMOTE_URL): Result<Long> = withContext(Dispatchers.IO) {
+        _syncState.value = SyncState.Running
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout = CONNECT_TIMEOUT_MS
@@ -54,21 +68,27 @@ class RestrictedListProvider(private val context: Context) {
             if (code != 200) {
                 val msg = "HTTP $code"
                 prefs.edit().putString(KEY_LAST_ERROR, msg).apply()
+                _syncState.value = SyncState.Error(msg)
                 return@withContext Result.failure(RuntimeException(msg))
             }
             val text = conn.inputStream.bufferedReader().use { it.readText() }
             val parsed = parse(text)  // бросит если невалидный
             cacheFile.writeText(text)
-            cached = parsed
+            val now = System.currentTimeMillis()
+            _list.value = parsed
+            _lastSyncMs.value = now
             prefs.edit()
-                .putLong(KEY_LAST_SYNC, System.currentTimeMillis())
+                .putLong(KEY_LAST_SYNC, now)
                 .remove(KEY_LAST_ERROR)
                 .apply()
             Log.i(TAG, "synced: ${parsed.packageNames.size} restricted + ${parsed.vpnOnlyPackageNames.size} vpnOnly")
+            _syncState.value = SyncState.Idle
             Result.success(parsed.updatedEpochMs)
         } catch (e: Exception) {
             Log.w(TAG, "sync failed: ${e.message}")
-            prefs.edit().putString(KEY_LAST_ERROR, e.message ?: e.javaClass.simpleName).apply()
+            val msg = e.message ?: e.javaClass.simpleName
+            prefs.edit().putString(KEY_LAST_ERROR, msg).apply()
+            _syncState.value = SyncState.Error(msg)
             Result.failure(e)
         }
     }
