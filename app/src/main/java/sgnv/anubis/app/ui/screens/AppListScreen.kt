@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -112,13 +113,7 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = {
-                    if (prefs.getBoolean("seen_auto_warning", false)) {
-                        viewModel.autoSelectRestricted()
-                    } else {
-                        showAutoWarning = true
-                    }
-                },
+                onClick = { showAutoWarning = true },
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Авто-выбор")
@@ -204,32 +199,156 @@ fun AppListScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     }
 
     if (showAutoWarning) {
-        AlertDialog(
-            onDismissRequest = { showAutoWarning = false },
-            title = { Text("Перед заморозкой") },
-            text = {
-                Text(
-                    "Anubis распределит ваши приложения по двум группам:\n\n" +
-                    "• «Без VPN» — банки, госуслуги, маркетплейсы и прочие RU-приложения, " +
-                    "которые палят VPN. Замораживаются когда VPN включён.\n\n" +
-                    "• «Только VPN» — YouTube, Instagram, Spotify и т.п., которые требуют " +
-                    "VPN для работы. Замораживаются когда VPN выключен.\n\n" +
-                    "Большинство лаунчеров уберут иконки замороженных приложений — это не удаление, " +
-                    "данные сохранятся. После разморозки ярлыки придётся расставить руками.\n\n" +
-                    "Уже добавленные вручную приложения не трогаем. Если что-то пойдёт не так — " +
-                    "в настройках есть «Восстановление» с массовой разморозкой."
-                )
+        AutoSelectCategoriesDialog(
+            onDismiss = { showAutoWarning = false },
+            onApply = { restrictedPkgs, restrictedPrefs, vpnOnlyPkgs ->
+                prefs.edit().putBoolean("seen_auto_warning", true).apply()
+                showAutoWarning = false
+                viewModel.autoSelectRestricted(restrictedPkgs, restrictedPrefs, vpnOnlyPkgs)
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    prefs.edit().putBoolean("seen_auto_warning", true).apply()
-                    showAutoWarning = false
-                    viewModel.autoSelectRestricted()
-                }) { Text("Заморозить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAutoWarning = false }) { Text("Отмена") }
+        )
+    }
+}
+
+/**
+ * Диалог выбора категорий для «Авто-выбор». Пользователь отмечает какие
+ * группы приложений автоматически добавить в LOCAL (палят VPN) и в VPN_ONLY
+ * (требуют VPN). По умолчанию отмечены «критичные» категории — банки, гос,
+ * VPN_ONLY-пакеты. Остальные (ритейл, фастфуд и т.п.) — на выбор.
+ */
+@Composable
+private fun AutoSelectCategoriesDialog(
+    onDismiss: () -> Unit,
+    onApply: (restrictedPkgs: Set<String>, restrictedPrefixes: List<String>, vpnOnlyPkgs: Set<String>) -> Unit,
+) {
+    // «Критичные» категории — по умолчанию отмечены. Банки, гос, telecom,
+    // media (стриминги палят VPN), соцсети/почта (VK экосистема трекает).
+    val criticalRestrictedIds = setOf("banks", "gov", "telecom", "social", "media", "yandex")
+    val restrictedChecks = remember {
+        mutableStateOf(
+            sgnv.anubis.app.data.DefaultRestrictedApps.categories
+                .associate { it.id to (it.id in criticalRestrictedIds) }
+                .toMutableMap()
+        )
+    }
+    // VPN_ONLY — все категории по умолчанию отмечены (это немного пакетов).
+    val vpnOnlyChecks = remember {
+        mutableStateOf(
+            sgnv.anubis.app.data.DefaultVpnOnlyApps.categories
+                .associate { it.id to true }
+                .toMutableMap()
+        )
+    }
+
+    // Yandex-категория управляет и prefix-патернами (com.yandex./ru.yandex.)
+    // — без неё случайный `ru.yandex.newapp` не попадёт в auto-select.
+    val includePrefixes: Boolean = restrictedChecks.value["yandex"] == true
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Что автоматически заморозить") },
+        text = {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.heightIn(max = 480.dp),
+            ) {
+                item {
+                    Text(
+                        "Уже добавленные вручную приложения не трогаем. Клавиатуры " +
+                            "не морозим никогда. После разморозки иконки могут перемешаться " +
+                            "в папках лаунчера — придётся расставить.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Без VPN (палят туннель — freeze при VPN on)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+                items(sgnv.anubis.app.data.DefaultRestrictedApps.categories) { cat ->
+                    CategoryCheckbox(
+                        label = cat.label,
+                        count = cat.packages.size,
+                        checked = restrictedChecks.value[cat.id] == true,
+                        onCheckedChange = { checked ->
+                            val m = restrictedChecks.value.toMutableMap()
+                            m[cat.id] = checked
+                            restrictedChecks.value = m
+                        },
+                    )
+                }
+                item {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Только VPN (требуют туннель — freeze при VPN off)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+                items(sgnv.anubis.app.data.DefaultVpnOnlyApps.categories) { cat ->
+                    CategoryCheckbox(
+                        label = cat.label,
+                        count = cat.packages.size,
+                        checked = vpnOnlyChecks.value[cat.id] == true,
+                        onCheckedChange = { checked ->
+                            val m = vpnOnlyChecks.value.toMutableMap()
+                            m[cat.id] = checked
+                            vpnOnlyChecks.value = m
+                        },
+                    )
+                }
             }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val restrictedPkgs = sgnv.anubis.app.data.DefaultRestrictedApps.categories
+                    .filter { restrictedChecks.value[it.id] == true }
+                    .flatMap { it.packages }
+                    .toSet()
+                val restrictedPrefs = if (includePrefixes)
+                    sgnv.anubis.app.data.DefaultRestrictedApps.prefixPatterns
+                else
+                    emptyList()
+                val vpnOnlyPkgs = sgnv.anubis.app.data.DefaultVpnOnlyApps.categories
+                    .filter { vpnOnlyChecks.value[it.id] == true }
+                    .flatMap { it.packages }
+                    .toSet()
+                onApply(restrictedPkgs, restrictedPrefs, vpnOnlyPkgs)
+            }) { Text("Применить") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Отмена") }
+        },
+    )
+}
+
+@Composable
+private fun CategoryCheckbox(
+    label: String,
+    count: Int,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            "$count",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

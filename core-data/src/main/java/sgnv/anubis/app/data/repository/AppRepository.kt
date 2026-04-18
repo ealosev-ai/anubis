@@ -52,22 +52,37 @@ class AppRepository(
      * [AppGroup.LOCAL] (палят VPN → freeze при VPN on) и приложения
      * требующие VPN — в [AppGroup.VPN_ONLY] (freeze при VPN off).
      *
+     * [restrictedPackages] — набор пакетов-кандидатов для LOCAL. По умолчанию
+     * все из [DefaultRestrictedApps.packageNames]. UI может сузить до
+     * отдельных категорий (банки/гос/только критичное).
+     * [vpnOnlyPackages] — то же для VPN_ONLY.
+     *
      * Уже управляемые пакеты не трогаем — иначе `insertAll(REPLACE)` перетёр бы
      * пользовательский выбор (например, он вручную положил YouTube в LAUNCH_VPN —
-     * не надо откатывать обратно в VPN_ONLY).
+     * не надо откатывать обратно в VPN_ONLY). Также пакеты из
+     * [DefaultRestrictedApps.neverRestrict] (активные IME) пропускаем всегда.
      */
-    suspend fun autoSelectRestricted(): Int {
+    suspend fun autoSelectRestricted(
+        restrictedPackages: Set<String> = DefaultRestrictedApps.packageNames,
+        restrictedPrefixes: List<String> = DefaultRestrictedApps.prefixPatterns,
+        vpnOnlyPackages: Set<String> = DefaultVpnOnlyApps.packageNames,
+    ): Int {
         val installed = getInstalledPackageNames().toSet()
         val alreadyManaged = dao.getAllPackageNames().toSet()
-        val candidates = installed - alreadyManaged
-
-        val newRestricted = candidates
-            .filter { DefaultRestrictedApps.isKnownRestricted(it) }
-            .map { ManagedApp(it, AppGroup.LOCAL) }
+        val candidates = installed - alreadyManaged - DefaultRestrictedApps.neverRestrict
 
         val newVpnOnly = candidates
-            .filter { DefaultVpnOnlyApps.isKnownVpnOnly(it) }
+            .filter { it in vpnOnlyPackages }
             .map { ManagedApp(it, AppGroup.VPN_ONLY) }
+        val vpnOnlyPkgs = newVpnOnly.map { it.packageName }.toSet()
+
+        val newRestricted = candidates
+            .filter { it !in vpnOnlyPkgs }  // VPN_ONLY приоритет — не дублируем
+            .filter { pkg ->
+                pkg in restrictedPackages ||
+                    restrictedPrefixes.any { pkg.startsWith(it) }
+            }
+            .map { ManagedApp(it, AppGroup.LOCAL) }
 
         dao.insertAll(newRestricted + newVpnOnly)
         return newRestricted.size + newVpnOnly.size

@@ -125,9 +125,17 @@ class AppListController(
         }
     }
 
-    fun autoSelectRestricted() {
+    fun autoSelectRestricted(
+        restrictedPackages: Set<String> = sgnv.anubis.app.data.DefaultRestrictedApps.packageNames,
+        restrictedPrefixes: List<String> = sgnv.anubis.app.data.DefaultRestrictedApps.prefixPatterns,
+        vpnOnlyPackages: Set<String> = sgnv.anubis.app.data.DefaultVpnOnlyApps.packageNames,
+    ) {
         scope.launch {
-            repository.autoSelectRestricted()
+            repository.autoSelectRestricted(
+                restrictedPackages = restrictedPackages,
+                restrictedPrefixes = restrictedPrefixes,
+                vpnOnlyPackages = vpnOnlyPackages,
+            )
             loadInstalledApps()
             loadGroupedApps()
         }

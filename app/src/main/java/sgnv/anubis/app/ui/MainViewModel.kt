@@ -280,7 +280,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeFromGroup(packageName: String) = appListController.removeFromGroup(packageName)
     fun createShortcut(packageName: String) = appListController.createShortcut(packageName)
     fun cycleAppGroup(packageName: String) = appListController.cycleAppGroup(packageName)
-    fun autoSelectRestricted() = appListController.autoSelectRestricted()
+    fun autoSelectRestricted(
+        restrictedPackages: Set<String> = sgnv.anubis.app.data.DefaultRestrictedApps.packageNames,
+        restrictedPrefixes: List<String> = sgnv.anubis.app.data.DefaultRestrictedApps.prefixPatterns,
+        vpnOnlyPackages: Set<String> = sgnv.anubis.app.data.DefaultVpnOnlyApps.packageNames,
+    ) = appListController.autoSelectRestricted(restrictedPackages, restrictedPrefixes, vpnOnlyPackages)
 
     fun unfreezeAllAndClear() {
         viewModelScope.launch {
