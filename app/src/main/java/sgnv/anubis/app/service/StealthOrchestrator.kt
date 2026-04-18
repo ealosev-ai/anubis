@@ -301,16 +301,23 @@ class StealthOrchestrator(
         _batchProgress.value = BatchProgress(done = 0, total = total, label = "Разморозка")
         val sem = Semaphore(permits = FREEZE_PARALLELISM)
         val counter = java.util.concurrent.atomic.AtomicInteger(0)
+        // async(Dispatchers.IO) обязательно — isAppInstalled / isAppFrozen это
+        // non-suspend binder-calls к PackageManager. Без явного IO-контекста
+        // они бежали бы на Main (viewModelScope), и 70+ приложений упирают
+        // Main-поток → ANR.
         packages.map { pkg ->
-            async {
+            async(kotlinx.coroutines.Dispatchers.IO) {
                 sem.withPermit {
                     if (shizukuManager.isAppInstalled(pkg) && shizukuManager.isAppFrozen(pkg)) {
                         shizukuManager.unfreezeApp(pkg)
                         delay(INTER_OP_DELAY_MS)
                     }
-                    _batchProgress.value = BatchProgress(
-                        done = counter.incrementAndGet(), total = total, label = "Разморозка",
-                    )
+                    val done = counter.incrementAndGet()
+                    // Обновляем прогресс каждую N-ю итерацию — чтобы не спамить
+                    // 70+ re-composition'ов Compose за 10-15 секунд.
+                    if (done % PROGRESS_UPDATE_EVERY == 0 || done == total) {
+                        _batchProgress.value = BatchProgress(done, total, "Разморозка")
+                    }
                 }
             }
         }.awaitAll()
@@ -376,16 +383,19 @@ class StealthOrchestrator(
         _batchProgress.value = BatchProgress(done = 0, total = total, label = "Заморозка")
         val sem = Semaphore(permits = FREEZE_PARALLELISM)
         val counter = java.util.concurrent.atomic.AtomicInteger(0)
+        // async(Dispatchers.IO) обязательно — иначе binder-calls на isAppInstalled /
+        // isAppFrozen висят на Main, и 70+ приложений = ANR.
         packages.map { pkg ->
-            async {
+            async(kotlinx.coroutines.Dispatchers.IO) {
                 sem.withPermit {
                     if (shizukuManager.isAppInstalled(pkg) && !shizukuManager.isAppFrozen(pkg)) {
                         shizukuManager.freezeApp(pkg)
                         delay(INTER_OP_DELAY_MS)
                     }
-                    _batchProgress.value = BatchProgress(
-                        done = counter.incrementAndGet(), total = total, label = "Заморозка",
-                    )
+                    val done = counter.incrementAndGet()
+                    if (done % PROGRESS_UPDATE_EVERY == 0 || done == total) {
+                        _batchProgress.value = BatchProgress(done, total, "Заморозка")
+                    }
                 }
             }
         }.awaitAll()
@@ -421,6 +431,8 @@ class StealthOrchestrator(
         const val FREEZE_PARALLELISM = 2
         /** Пауза между freeze/unfreeze операциями, чтобы Honor launcher переварил PACKAGE_REMOVED broadcast. */
         const val INTER_OP_DELAY_MS = 100L
+        /** Батчим обновления прогресс-бара — иначе 70+ re-composition'ов за 15с тормозят Compose. */
+        const val PROGRESS_UPDATE_EVERY = 3
     }
 }
 

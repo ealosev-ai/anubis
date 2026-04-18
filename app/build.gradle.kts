@@ -16,8 +16,8 @@ android {
         applicationId = "sgnv.anubis.app"
         minSdk = 29
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.1.4"
+        versionCode = 6
+        versionName = "0.1.5"
         // Custom runner подменяет AnubisApp на TestAnubisApp в тестах —
         // для Compose UI-сценариев важно не тянуть реальный VpnClientManager.
         testInstrumentationRunner = "sgnv.anubis.app.AnubisTestRunner"
